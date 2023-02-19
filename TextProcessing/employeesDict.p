@@ -1,5 +1,5 @@
 (dp0
-S'EE1111'
+S'SS1111'
 p1
 (i__main__
 Person
@@ -58,7 +58,7 @@ S'Luka L Luka'
 p23
 sg8
 g19
-sbsS'JJ1111'
+sbsS'RR1111'
 p24
 (i__main__
 Person

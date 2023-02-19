@@ -19,3 +19,15 @@ Python has great strengths in processing with the automatic itterator in for loo
 Function and comment writing were good reviews for me. Proper implementation of input checking was a nice review. Dynamic variables seem very powerful yet I find myself defining them at the start of most functions anyway. I did learn the scope of python a lot more and that really helped.
 
 You can see the homework [here](TextProcessing/Homework1_aae180003.py)
+
+
+## Python Guessing Game Homework 2
+
+This program takes in a txt, cleans up the data, calculates the number of tokens, unique tokens, and lexical diversity in such txt file.
+
+To Run: download the .py and the data file and run in command line with the command 
+'python Homework2_aae180003.py anat19.txt'.
+
+After cleaning up the input text and getting a set of unique lemmas the program uses nltk to categorize the parts of speech. The program then calculates and prints the top 50 nouns and enters into a word guessing game. It's basically a customized hangman game.(you might have to downlaod certain nltk packages to run the code)
+
+You can see the homework [here](GuessingGame/Homework2_aae180003.py)

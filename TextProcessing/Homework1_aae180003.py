@@ -60,7 +60,7 @@ class Person:
 
 
 def processFile(buf):
-    buffer = str(buf)
+    buffer = buf
     workers = {}
 
     buffer = buffer.replace("\n", "").split('\r')[1:]            #clean up by deleting newlines and throw away first line which is the document format and split by '\r'
