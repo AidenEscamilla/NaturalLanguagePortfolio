@@ -28,6 +28,14 @@ This program takes in a txt, cleans up the data, calculates the number of tokens
 To Run: download the .py and the data file and run in command line with the command 
 'python Homework2_aae180003.py anat19.txt'.
 
-After cleaning up the input text and getting a set of unique lemmas the program uses nltk to categorize the parts of speech. The program then calculates and prints the top 50 nouns and enters into a word guessing game. It's basically a customized hangman game.(you might have to downlaod certain nltk packages to run the code)
+After cleaning up the input text and getting a set of unique lemmas the program uses nltk to categorize the parts of speech. The program then calculates and prints the top 50 nouns and enters into a word guessing game. It's basically a customized hangman game.(you might have to download certain nltk packages to run the code)
 
 You can see the homework [here](GuessingGame/Homework2_aae180003.py)
+
+## Python WordNet Homework 3
+
+This program runs through the use and practice of WordNet, SentiWordNet, and collocations.
+
+After picking my noun and verbs I go through the WordNet hierarchy and type out plenty of summaries and reflections in the google collab. Next is the similarity between words which uses SentiWordNet. It seems very primative with only 3 scores that usually come out to whole fractions. But it's fun to see what words it thinks are positive or negative, and what words it thinks are and aren't similar. Last, collocations seems to just be a quick and easy way to find the bigrams in a text. I know it's trying to find collections that are greater than the sum of their parts but my results seem lacking.
+
+You can see the Collab [here](WordNet/WordNetHw3.pdf)
