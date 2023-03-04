@@ -60,3 +60,14 @@ then:
 You can see the training [here](nGrams/Homework4_createNGrams_aae180003.py)
 You can see the language detection [here](nGrams/Homework4_languageDetection_aae180003.py)
 And the overview/reflection write up [here](nGrams/n-grams_WriteUp.pdf)
+
+## Parsing Overview pdf
+
+This is an overview of my understanding of three different parsing styles.
+Constituent, dependency, and SRL parsing. 
+
+Constituent seems a lot more intuitive since I learned POS tagging and it follows that hierarchy closely.
+Dependency seems very helpful for visual people but not so much myself. It tagged a weird part of my example sentence as a conjunction .
+SRL in nicknamed shallow parsing for a reason. It separates the verbs into different predicates and gives them all their proper argument assignments. It seemed fitting for the sentence but uses too many broad categories for my liking.
+
+You can read the file [here](Parsing/ParsingByHand.pdf)
