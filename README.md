@@ -71,3 +71,14 @@ Dependency seems very helpful for visual people but not so much myself. It tagge
 SRL in nicknamed shallow parsing for a reason. It separates the verbs into different predicates and gives them all their proper argument assignments. It seemed fitting for the sentence but uses too many broad categories for my liking.
 
 You can read the file [here](Parsing/ParsingByHand.pdf)
+
+## WebCrawler
+
+Here we were supposed to make a web crawler that scraped text from websites about a certain topic. I chose genius.com to collect song lyric text. I started with the url for a single artist and crawled the links to every one of their songs. From there I gathered the lyrics, cleaned them up, and used nltk to get the frequency and importance of words in every song.
+
+The importance of every word is calculated with term frequency in a document (tf) and inverse document frequency (idf) with the formula tf*idf. This allows the program to print a list of the top 25 words on every page. With a more specific topic this would show a lot of overlapping terms but because most of the songs are different the terms don't overlap for me.
+
+Do be careful trying to run this code because it creates a file for ever song it finds as per part of the homework requirments.
+
+See the code [here](WebCrawler/Homework5_aae180003.py)
+You can read the find and example chatbot dialogue [here](WebCrawler/Webcrawler_Findings.pdf)
