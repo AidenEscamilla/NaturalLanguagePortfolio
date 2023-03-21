@@ -17,7 +17,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from spotipy.oauth2 import SpotifyOAuth
 import unicodedata
-
+import linecache
 
  
 
@@ -25,7 +25,7 @@ import unicodedata
 def getSpotifyArtists(trackLimit):
     artist = []
     scope = "user-library-read"
-
+    
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
     results = sp.current_user_saved_tracks(limit=trackLimit)
@@ -58,9 +58,11 @@ def getSpotifyAlbums(trackLimit):
 def getSpotifySongs():
     songs = []
     urlList = []
+    songDict = {}
     moreSongs = True
     songOffset = 0
     scope = "user-library-read"
+    counter = 0
 
     #while moreSongs:
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
@@ -72,12 +74,12 @@ def getSpotifySongs():
             track = item['track']
             temp = [track['name'], track['artists'][0]['name']]
             songs.append(temp)
-        
+            counter += 1
         if len(results['items']) < 10:
             moreSongs = False
         else:
-            #print('OffSet = ', songOffset, 'len(items): ', len(results['items']))
-            #print(songs[9 + songOffset])
+            print('OffSet = ', songOffset, 'len(items): ', len(results['items']))
+            print(songs[9 + songOffset])
             songOffset += 10
         
 
@@ -86,44 +88,57 @@ def getSpotifySongs():
 
     for song in songs:
         song[1] = re.sub('[/](?=[0-9])', '-', song[1])
-        song[1] = re.sub('\'|[?.!$,/]|\(feat.*\)|[()]', '', song[1])
+        song[1] = re.sub('[Ff]eat.*', '', song[1])     #fixes formating from song titles
+        song[1] = re.sub('\'|[?.!$+,/]|\(feat*\)|[()]', '', song[1])
         song[1] = re.sub('[&]', 'and', song[1])
         song[1] = re.sub('[:]', '-', song[1])
         song[0] = re.sub('[/](?=[0-9])', '-', song[0])
-        song[0] = re.sub('\'|[?.!,$/]|\(feat.*\)|[()]', '', song[0])     #fixes formating from song titles
+        song[0] = re.sub('[Ff]eat.*', '', song[0])     #fixes formating from song titles
+        song[0] = re.sub('\'|[?.!,+$/]|\(feat*\)|[()]', '', song[0])     #fixes formating from song titles
         song[0] = re.sub('[&]', 'and', song[0])
         song[0] = re.sub('[:]', '-', song[0])
+        artist = song[1].split(' ')
+        artist = '-'.join(artist).lower()
+        artist = re.sub('-[*-]', '', artist)
+        title = song[0].split(' ')
+        title = '-'.join(title).lower()
+        title = re.sub('-[*-]', '', title)
         tokens = (song[1] + ' ' + song[0]).split()
         urlString = Myurl + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
         urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
         urlList.append(urlString)
+        songDict[urlString] = [artist, title]
         
         
-    return urlList
+    return urlList, songDict
 
 
 
-def filterPage(soup, outputFileName, filterString):
+def filterPage(soup, outputFileName, filterArtist, filterSong):
     with open(outputFileName, 'w') as f:
         for link in soup.find_all('a'):
             link_str = str(link.get('href'))
-            print(link_str)
-            if filterString in link_str: #or 'front' in link_str:
-                if link_str.startswith('/url?q='):
-                    link_str = link_str[7:]
-                    print('MOD:', link_str)
-                if '&' in link_str:
-                    i = link_str.find('&')
-                    link_str = link_str[:i]
-                if link_str.startswith('http') and 'google' not in link_str:
-                    f.write(link_str + '\n')
+            #print(link_str)
+            tokens = filterSong.split('-')
+            for token in tokens:
+                if filterArtist in link_str and token in link_str and 'lyric' in link_str: #or 'front' in link_str:
+                    print('FOUND: ' , link_str, '\n')
+                    if link_str.startswith('/url?q='):
+                        link_str = link_str[7:]
+                        print('MOD:', link_str)
+                    if '&' in link_str:
+                        i = link_str.find('&')
+                        link_str = link_str[:i]
+                    if link_str.startswith('http') and 'google' not in link_str:
+                        f.write(link_str + '\n')
+                        continue
 
 def filterPageAppend(soup, outputFileName, filterString, moreFilterString):
     with open(outputFileName, 'a') as f:
         for link in soup.find_all('a'):
             link_str = str(link.get('href'))
             print(link_str)
-            if filterString in link_str and moreFilterString in link_str: #or 'Boywithuke' in link_str:
+            if filterString in link_str and moreFilterString in link_str: #ex. and 'Boywithuke' in link_str:
                 if link_str.startswith('/url?q='):
                     link_str = link_str[7:]
                     print('MOD:', link_str)
@@ -133,8 +148,12 @@ def filterPageAppend(soup, outputFileName, filterString, moreFilterString):
                 if link_str.startswith('http') and 'google' not in link_str:
                     f.write(link_str + '\n')
 
-def getSoupFromWebsite(urlString):
+def getSoupFromWebsite(urlString, songNotWorking):
+
     Myheaders = {'User-Agent': 'AppleWebKit/537.36'}
+    artistJustInCase = songNotWorking[0]
+    SongTitleJustInCase = songNotWorking[1]
+
     Myurl = urlString
     if not Myurl.isascii():
         print('in here: ', Myurl)
@@ -147,10 +166,46 @@ def getSoupFromWebsite(urlString):
     req = Request(url=Myurl, headers=Myheaders)
     #TRY CATCH 404 ERROR HERE
     try:
-            html = urlopen(req).read().decode('utf-8')
+        html = urlopen(req).read().decode('utf-8')
+        
     except urllib.error.HTTPError as errh:
-        print ("Http Error:", urlString)
-        return '-1'
+        #with open('NotWorkingLinks.txt', 'a') as f:
+        #        f.write(Myurl + '\n')
+        #return '-1'
+        #CHECKPOINT
+        Myurl = 'https://genius.com/' + artistJustInCase
+        req = Request(url=Myurl, headers=Myheaders)
+        try:
+            html = urlopen(req).read().decode('utf-8')
+            soup = BeautifulSoup(html, features="html.parser")
+            for script in soup(["script", "style", "html.parser"]):
+                script.extract()    # rip it out
+            filterPage(soup, 'tryingArtist.txt', artistJustInCase, SongTitleJustInCase)
+            
+            trying = linecache.getline('tryingArtist.txt', 1)
+            findingLyricsUrl = trying# + '-lyrics'
+
+            if not findingLyricsUrl.startswith('http'):
+                raise urllib.error.HTTPError(url=findingLyricsUrl, code=None, msg='empty', hdrs=Myheaders, fp=None)
+
+            req = Request(url=findingLyricsUrl, headers=Myheaders)
+            html = urlopen(req).read().decode('utf-8')
+            soup = BeautifulSoup(html, features="html.parser")
+
+            for script in soup(["script", "style", "html.parser"]):
+                script.extract()    # rip it out
+
+            return soup
+        
+        except urllib.error.HTTPError as e:
+            with open('NotWorkingLinks.txt', 'a') as f:
+                f.write(urlString + '\n')
+            return '-1'
+        except UnicodeEncodeError as typo:
+            with open('NotWorkingLinks.txt', 'a') as f:
+                f.write(urlString + '\n')
+            return '-1'
+        
     #except requests.exceptions.ConnectionError as errc:
     #    print ("Error Connecting:",errc)
     #except requests.exceptions.Timeout as errt:
@@ -168,15 +223,17 @@ def getSoupFromWebsite(urlString):
     return soup
 
 
-def generateLyricFiles(urlsFile):
+def generateLyricFiles(urlsFile, songNotWorking):
     filesMade = []
    
     with open(urlsFile, 'r') as f:
         LyricUrls = f.read().splitlines()
 
-    for url in LyricUrls:
-        #print('working: ', url)
-        lyricSoup = getSoupFromWebsite(url)
+    open('NotWorkingLinks.txt', "w").close()
+    for i, url in enumerate(LyricUrls):
+        print(url)
+        print('DictGet: ', songNotWorking.get(url))
+        lyricSoup = getSoupFromWebsite(url, songNotWorking.get(url))
 
         if lyricSoup == '-1':       #Skip 404's
             #print('skipped: ', url)
@@ -184,6 +241,7 @@ def generateLyricFiles(urlsFile):
 
         fileName = 'Lyrics: ' + lyricSoup.find('h1').getText() + '.txt'
         fileName = fileName.replace('/', '_')
+        fileName = 'Lyrics/' + fileName
         filesMade.append(fileName)
         containers = lyricSoup.findAll('div', {"data-lyrics-container": True})
 
@@ -213,6 +271,7 @@ def generateLyricFiles(urlsFile):
 
     return filesMade
 
+#Term frequency (TF) is how often a token appears in a document 
 def createTF(documentFile):
     tokens = []
     stop_words = set(stopwords.words('english'))
@@ -230,7 +289,7 @@ def createTF(documentFile):
             tf_dict[token] = tf_dict[token] / len(tokens)   #calc requency
     
     return tf_dict
-
+#tf * idf is similar to an inportance measure for a token based on your corpus (training data)
 def create_tfidf(tf, idf):
     tf_idf = {}
     for t in tf.keys():
@@ -255,7 +314,7 @@ def createTF_IDF_TfxIdf(filesIn):
     for dictionary in tf:
         vocab = vocab.union(set(dictionary.keys()))
 
-    #create idf dict
+    #create inverse document frequency (idf) dict. If a word appears in every document its common if its in only 1 or 2 its a rare term
     idf_dict = {}
     vocab_by_topic = []
     for d in tf:
@@ -278,6 +337,10 @@ def createTF_IDF_TfxIdf(filesIn):
     return tf, idf_dict, tf_idf_list
 
 
+
+
+
+#I just keep adding peoples spotify songs into this dictionary full of songs and the related score
 def buildKnowledgeBase(filesCreated, term_Importance_list):
     sia = SentimentIntensityAnalyzer()
 
@@ -332,62 +395,58 @@ def buildKnowledgeBase(filesCreated, term_Importance_list):
     
     with open('knowledgeBase_sentiment_Dict.pickle', 'wb') as handle:
         pickle.dump(knowledge, handle)
+    #print('\n\nKNOWLEDGE BASE\n\n')
+    #for pair in knowledge:
+    #    print(pair, ' SCORE: ', knowledge.get(pair))
 
-        
+
+
+
+
+
+
 
 def main():
     ssl._create_default_https_context = ssl._create_unverified_context
     
-
-    #artistList = getSpotifyArtists(50)
-    #print(artistList, '\n', len(artistList))
-
-    #albumList = getSpotifyAlbums(50)
-    #print(albumList, '\n', len(albumList))
-
-    songUrlList = getSpotifySongs()
+        #num_songs = int(sys.argv[1])
+    pickleFileName = sys.argv[1]
+        #artistList = getSpotifyArtists(50)
+        #print(artistList, '\n', len(artistList))
     
+        #albumList = getSpotifyAlbums(50)
+        #print(albumList, '\n', len(albumList))
+
+
+    urls_and_songs = getSpotifySongs()
+    songUrlList = urls_and_songs[0]
+    songMaybeNotWorking = urls_and_songs[1]
+    with open('songs.pickle', 'wb') as handle:
+        pickle.dump(songMaybeNotWorking, handle)
+    with open('songs.pickle', 'rb') as handle:
+        songMaybeNotWorking = pickle.load(handle)
     #songUrlList = []
 
-    with open('AidensSongs.pickle', 'wb') as handle:
+    with open(pickleFileName, 'wb') as handle:
         pickle.dump(songUrlList, handle)
     
-    with open('AidensSongs.pickle', 'rb') as handle:
+    with open(pickleFileName, 'rb') as handle:
         songUrlList = pickle.load(handle)
     
     #for song in songUrlList:
-        #print(song)
+    #    print(song)
     
-    '''
-    Myurl = "https://genius.com/artists/" + artistNameFromInput
-    print('\n', Myurl)
-    
-    soup = getSoupFromWebsite(Myurl)
-    filterPage(soup, 'urls.txt', 'album')
 
     
-    with open('urls.txt', 'r') as f:
-        AlbumUrls = f.read().splitlines()
-
-    #Edit: nvm no need to be careful. this code clears the file before a new artist
-    open('lyricPages.txt', "w").close()
-    for album in AlbumUrls:
-        albumSoup = getSoupFromWebsite(album)
-        #print('\nNEW LINE\n')                         #CHANGE ARTIST NAME BELOW THE HASHTAG Edit: changed to sys arg input variable
-        filterPageAppend(albumSoup, 'lyricPages.txt', artistNameFromInput, 'lyrics')
-
-
-    '''
-    
-    with open('lyricPages.txt', 'w') as f:
+    with open('Lyrics/lyricPages.txt', 'w') as f:
         for url in songUrlList:
             f.write(url + '\n')
-
+    
 
     #pickled and opened because this is a long process and i wanted to test and play with the code-
     #-Without webcrawling and geneerating every run
     #CHECKPOINT
-    filesCreated = generateLyricFiles('lyricPages.txt')
+    filesCreated = generateLyricFiles('Lyrics/lyricPages.txt', songMaybeNotWorking)
     
     with open('files.pickle', 'wb') as handle:
         pickle.dump(filesCreated, handle)
@@ -426,8 +485,38 @@ def main():
     quit()
 
 if __name__ == '__main__':
-    if len(sys.argv) == 2:
-        #print('Please enter a subset number of your liked songs as a system arg. (Type \'50\')')
+    if len(sys.argv) < 2:
+        print('Please enter  as a system arg  pickle file name. (Type \'FirstnameSongs.pickle\')')
         quit()
     else:
         main()
+
+
+
+
+
+
+
+
+
+
+'''
+    Myurl = "https://genius.com/artists/" + artistNameFromInput
+    print('\n', Myurl)
+    
+    soup = getSoupFromWebsite(Myurl)
+    filterPage(soup, 'urls.txt', 'album')
+
+    
+    with open('urls.txt', 'r') as f:
+        AlbumUrls = f.read().splitlines()
+
+    #Edit: nvm no need to be careful. this code clears the file before a new artist
+    open('lyricPages.txt', "w").close()
+    for album in AlbumUrls:
+        albumSoup = getSoupFromWebsite(album)
+        #print('\nNEW LINE\n')                         #CHANGE ARTIST NAME BELOW THE HASHTAG Edit: changed to sys arg input variable
+        filterPageAppend(albumSoup, 'lyricPages.txt', artistNameFromInput, 'lyrics')
+
+
+'''
