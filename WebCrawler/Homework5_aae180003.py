@@ -55,6 +55,31 @@ def getSpotifyAlbums(trackLimit):
 
     return [*set(albums)]
 
+def getSpotifyPlaylists():
+    morePlaylists = True
+    songOffset = 0
+
+    scope = "playlist-read-private"
+
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+
+
+    while morePlaylists:
+        results = sp.current_user_playlists(limit=10, offset=songOffset)
+        
+        if len(results['items']) < 10:
+            morePlaylists = False
+        else:
+            for i, playlist in enumerate(results['items']):
+                print(i, ': ', playlist['id'], '\n')            
+            print('LINE: ', songOffset/10)
+            songOffset += 10
+
+        
+
+
+    return [results]
+
 def getSpotifySongs():
     songs = []
     urlList = []
@@ -416,8 +441,8 @@ def main():
     
         #albumList = getSpotifyAlbums(50)
         #print(albumList, '\n', len(albumList))
-
-
+    temp = getSpotifyPlaylists()
+    '''
     urls_and_songs = getSpotifySongs()
     songUrlList = urls_and_songs[0]
     songMaybeNotWorking = urls_and_songs[1]
@@ -481,7 +506,7 @@ def main():
     
     
 
-    
+    '''
     quit()
 
 if __name__ == '__main__':
