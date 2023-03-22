@@ -63,7 +63,7 @@ def getSpotifyPlaylists():
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-
+    print(sp.current_user_playlists(limit=10, offset=songOffset))
     while morePlaylists:
         results = sp.current_user_playlists(limit=10, offset=songOffset)
         
@@ -71,7 +71,7 @@ def getSpotifyPlaylists():
             morePlaylists = False
         else:
             for i, playlist in enumerate(results['items']):
-                print(i, ': ', playlist['id'], '\n')            
+                print(i, ': ', playlist['name'], '\n', playlist['tracks']['href'], '\n')            
             print('LINE: ', songOffset/10)
             songOffset += 10
 
