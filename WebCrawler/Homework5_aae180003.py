@@ -488,18 +488,19 @@ def main():
     print('\nPrinting top 25 terms per document:\n\n')
 
     # find the highest tf-idf terms for each document
+    #FOR PRINTING PURPOSES
     for dic in tf_idf_list:             #bottome two lines used for printing purposes but the document name is a string and doesn't compar with floats so i delete it before sorting
         docName = dic.get('Document')
         del dic['Document']
         doc_term_weights = sorted(dic.items(), key=lambda x:x[1], reverse=True)
-        print("\n",docName, ': ', doc_term_weights[:25])
-
+        #print("\n",docName, ': ', doc_term_weights[:25])
+    
     allWords = []
     for dictionary in list_of_tfs:
         allWords += dictionary.keys()
     fd = nltk.FreqDist(allWords)
     print('\n\nMy top 10 terms', fd.most_common(11))
-    
+    #Document pops up but it is my palceholder element just to hold the titles of the songs it's not actually the top word
 
     #build knowledge base
     buildKnowledgeBase(filesCreated, tf_idf_list)
