@@ -4,7 +4,7 @@ from urllib.request import Request
 import ssl
 from bs4 import BeautifulSoup
 import re
-import nltk
+import nltk #maybe un needed
 from nltk.tokenize import sent_tokenize
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -12,14 +12,40 @@ import pickle
 import math
 from nltk.sentiment import SentimentIntensityAnalyzer
 import sys  # to get the system parameter
-import requests  
+import requests  #maybe un needed
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from spotipy.oauth2 import SpotifyOAuth
 import unicodedata
 import linecache
 
- 
+def processSongs(songList, urlList, songDict):
+    url = "https://genius.com/"
+
+    for song in songList:
+        song[1] = re.sub('[/](?=[0-9])', '-', song[1])
+        song[1] = re.sub('[Ff]eat.*', '', song[1])     #fixes formating from song titles
+        song[1] = re.sub('\'|[?.!$+,/]|\(feat*\)|[()]', '', song[1])
+        song[1] = re.sub('[&]', 'and', song[1])
+        song[1] = re.sub('[:]', '-', song[1])
+        song[0] = re.sub('[/](?=[0-9])', '-', song[0])
+        song[0] = re.sub('[Ff]eat.*', '', song[0])     #fixes formating from song titles
+        song[0] = re.sub('\'|[?.!,+$/]|\(feat*\)|[()]', '', song[0])     #fixes formating from song titles
+        song[0] = re.sub('[&]', 'and', song[0])
+        song[0] = re.sub('[:]', '-', song[0])
+        artist = song[1].split(' ')
+        artist = '-'.join(artist).lower()
+        artist = re.sub('-[*-]', '', artist)
+        title = song[0].split(' ')
+        title = '-'.join(title).lower()
+        title = re.sub('-[*-]', '', title)
+        tokens = (song[1] + ' ' + song[0]).split()
+        urlString = url + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
+        urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
+        urlList.append(urlString)
+        songDict[urlString] = [artist, title]
+
+    return urlList, songDict
 
 
 def getSpotifyArtists(trackLimit):
@@ -57,28 +83,74 @@ def getSpotifyAlbums(trackLimit):
 
 def getSpotifyPlaylists():
     morePlaylists = True
-    songOffset = 0
-
+    MyOffset = 0
+    playlistsTracksUrls = []
     scope = "playlist-read-private"
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    print(sp.current_user_playlists(limit=10, offset=songOffset))
     while morePlaylists:
-        results = sp.current_user_playlists(limit=10, offset=songOffset)
+        results = sp.current_user_playlists(limit=10, offset=MyOffset)
         
         if len(results['items']) < 10:
             morePlaylists = False
         else:
             for i, playlist in enumerate(results['items']):
-                print(i, ': ', playlist['name'], '\n', playlist['tracks']['href'], '\n')            
-            print('LINE: ', songOffset/10)
-            songOffset += 10
+                #print(i, ': ', playlist['name'], '\n', playlist['tracks']['href'], '\n') 
+                playlistsTracksUrls.append(playlist['id'])          
+            print('LINE: ', MyOffset/10)
+            MyOffset += 10
 
         
 
+    return playlistsTracksUrls
 
-    return [results]
+
+
+def getPlaylistSongs(trackUrlList):
+    MyOffset = 0
+    songs = []
+    urlList = []
+    songDict = {}
+    moreSongs = True
+
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth())
+    for playlist in trackUrlList:
+        #print('PLAYLIST: ', playlist)
+        
+        while moreSongs:
+            results = sp.playlist_tracks(playlist_id=playlist, fields='items(is_local,track(name,artists(name)))', limit=10, offset=MyOffset)
+            
+            for item in results['items']:
+                if item['is_local']:    #Skip local files
+                    continue
+                #print(item['track']['name'], ': ', item['track']['artists'][0]['name'])
+                temp = [item['track']['name'], item['track']['artists'][0]['name']]
+                songs.append(temp)
+        
+            if len(results['items']) < 10:
+                moreSongs = False
+            else:
+                MyOffset += 10
+
+        moreSongs = True
+
+
+    #make a set of songs before processing
+    setMaker = []
+    for song in songs:
+        if not song in setMaker:
+            setMaker.append(song)
+
+    songs = setMaker   #tested, it works
+
+    holder = processSongs(songs, urlList, songDict)
+    urlList = holder[0] 
+    songDict = holder[1]
+    
+
+    return urlList, songDict
+
 
 def getSpotifySongs():
     songs = []
@@ -88,8 +160,8 @@ def getSpotifySongs():
     songOffset = 0
     scope = "user-library-read"
     counter = 0
+    #CHANGE COUNTER FOR MORE SONGS IN LIBRARY
 
-    #while moreSongs:
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
     while moreSongs:
@@ -100,7 +172,7 @@ def getSpotifySongs():
             temp = [track['name'], track['artists'][0]['name']]
             songs.append(temp)
             counter += 1
-        if len(results['items']) < 10:
+        if len(results['items']) < 10 and counter < 25:
             moreSongs = False
         else:
             print('OffSet = ', songOffset, 'len(items): ', len(results['items']))
@@ -108,33 +180,15 @@ def getSpotifySongs():
             songOffset += 10
         
 
-    Myurl = "https://genius.com/"
     
+    holder = processSongs(songs, urlList, songDict)
 
-    for song in songs:
-        song[1] = re.sub('[/](?=[0-9])', '-', song[1])
-        song[1] = re.sub('[Ff]eat.*', '', song[1])     #fixes formating from song titles
-        song[1] = re.sub('\'|[?.!$+,/]|\(feat*\)|[()]', '', song[1])
-        song[1] = re.sub('[&]', 'and', song[1])
-        song[1] = re.sub('[:]', '-', song[1])
-        song[0] = re.sub('[/](?=[0-9])', '-', song[0])
-        song[0] = re.sub('[Ff]eat.*', '', song[0])     #fixes formating from song titles
-        song[0] = re.sub('\'|[?.!,+$/]|\(feat*\)|[()]', '', song[0])     #fixes formating from song titles
-        song[0] = re.sub('[&]', 'and', song[0])
-        song[0] = re.sub('[:]', '-', song[0])
-        artist = song[1].split(' ')
-        artist = '-'.join(artist).lower()
-        artist = re.sub('-[*-]', '', artist)
-        title = song[0].split(' ')
-        title = '-'.join(title).lower()
-        title = re.sub('-[*-]', '', title)
-        tokens = (song[1] + ' ' + song[0]).split()
-        urlString = Myurl + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
-        urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
-        urlList.append(urlString)
-        songDict[urlString] = [artist, title]
+    #readability
+    urlList = holder[0] 
+    songDict = holder[1]
+
         
-        
+
     return urlList, songDict
 
 
@@ -442,6 +496,7 @@ def main():
         #albumList = getSpotifyAlbums(50)
         #print(albumList, '\n', len(albumList))
     temp = getSpotifyPlaylists()
+    playlistSongs = getPlaylistSongs(temp)
     '''
     urls_and_songs = getSpotifySongs()
     songUrlList = urls_and_songs[0]
