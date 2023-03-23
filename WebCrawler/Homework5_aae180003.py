@@ -417,10 +417,10 @@ def createTF_IDF_TfxIdf(connection):
     #create tf dictionaries
     tf = []
 
-    result = con.execute('SELECT lyrics FROM Lyrics')
-    rows = result.fetchall()
-    for i, row in enumerate(rows):
-        print(i, ':###### ', row['lyrics'])
+    #result = con.execute('SELECT lyrics FROM Lyrics')
+    #rows = result.fetchall()
+    #for i, row in enumerate(rows):
+    #    print(i, ':###### ', row['lyrics'])
 
     res = con.execute('SELECT * FROM Song INNER JOIN Lyrics ON Song.url = Lyrics.url')
     for i, song in enumerate(res.fetchall()):
@@ -461,42 +461,39 @@ def createTF_IDF_TfxIdf(connection):
 
 
 #I just keep adding peoples spotify songs into this dictionary full of songs and the related score
-def buildKnowledgeBase(filesCreated, term_Importance_list):
+def buildKnowledgeBase(connection, term_Importance_list):
     sia = SentimentIntensityAnalyzer()
 
     sentences = []
-    knowledge = {}
     #scores = []
     weightedScores = []
 
-    #IF you have an error check here maybe you're reading before the knowledge base is created. Comment out and try again then uncomment out for future runs
-    with open('knowledgeBase_sentiment_Dict.pickle', 'rb') as handle:
-        knowledge = pickle.load(handle)
+    #res = connection.execute('SELECT Count(*) FROM Song')
+    #num_rows = int(res.fetchone()[0])
+    #print('NUM_ROWS:', num_rows, '\n')
 
-    for i, file in enumerate(filesCreated):
+    res = connection.execute('SELECT * FROM Song INNER JOIN Lyrics ON Song.url = Lyrics.url')
+    for i, song in enumerate(res.fetchall()):
 
-        with open(file, 'r') as f:
+        lines = song['lyrics']
+        sentences = sent_tokenize(lines)
 
-            lines = f.read()
-            sentences = sent_tokenize(lines)
+        for sentence in sentences:
+            if len(sentences) == 0:
+                continue
 
-            for sentence in sentences:
+            tokens = word_tokenize(sentence.lower())
+            tokens = [w for w in tokens if w.isalpha() and w not in stopwords.words('english')] #get clean tokens
 
-                if len(sentences) == 0:
-                    continue
+            tf_idf_weight_multiplyer = 1
+            for token in tokens:        #(taken the same way as the function), multiply together term weights to get total sentence importance. Multiply sentence sentiment score by importance per sentence to get more accurate scores
+                if token in term_Importance_list[i]:
+                    tf_idf_weight_multiplyer *= term_Importance_list[i].get(token)       #Double check if this is getting the right token
+                else:
+                    tf_idf_weight_multiplyer *= 1/len(term_Importance_list[i])       #Add smoothing here and an if statment for tokens not found #this is bad smooothing
 
-                tokens = word_tokenize(sentence.lower())
-                tokens = [w for w in tokens if w.isalpha() and w not in stopwords.words('english')] #get clean tokens
-
-                tf_idf_weight_multiplyer = 1
-                for token in tokens:        #(taken the same way as the function), multiply together term weights to get total sentence importance. Multiply sentence sentiment score by importance per sentence to get more accurate scores
-                    if token in term_Importance_list[i]:
-                        tf_idf_weight_multiplyer *= term_Importance_list[i].get(token)       #Double check if this is getting the right token
-                    else:
-                        tf_idf_weight_multiplyer *= 1/len(term_Importance_list[i])       #Add smoothing here and an if statment for tokens not found #this is bad smooothing
-
-                weightedScores.append(sia.polarity_scores(sentence)["compound"] * tf_idf_weight_multiplyer)
-                #scores.append(sia.polarity_scores(sentence)["compound"])
+            weightedScores.append(sia.polarity_scores(sentence)["compound"] * tf_idf_weight_multiplyer)
+            #scores.append(sia.polarity_scores(sentence)["compound"])
         
         #total = 0
         weightedTotal = 0
@@ -506,15 +503,14 @@ def buildKnowledgeBase(filesCreated, term_Importance_list):
             weightedTotal += Wscore
 
         if len(sentences) != 0:     #need this iff statment because some songs are found and files are made but they are instrumentals with no lyrics
-            knowledge[file] = weightedTotal
-    
+            connection.execute('INSERT OR REPLACE INTO Song VALUES(:url, :name, :artist, :sentiment_Score)', (song['url'], song['name'], song['artist'], weightedTotal))
+            connection.commit()
     #counter = 0
     #for pair in knowledge:
     #    print('\n', pair, ': SENTI SCORE ', knowledge.get(pair))
 
     
-    with open('knowledgeBase_sentiment_Dict.pickle', 'wb') as handle:
-        pickle.dump(knowledge, handle)
+
     #print('\n\nKNOWLEDGE BASE\n\n')
     #for pair in knowledge:
     #    print(pair, ' SCORE: ', knowledge.get(pair))
@@ -538,8 +534,7 @@ def main():
     con.execute("CREATE TABLE IF NOT EXISTS Lyrics(lyrics, url, FOREIGN KEY(url) REFERENCES Song(url))")
 
 
-        #num_songs = int(sys.argv[1])
-    pickleFileName = sys.argv[1]
+
         #artistList = getSpotifyArtists(50)
         #print(artistList, '\n', len(artistList))
     
@@ -549,31 +544,7 @@ def main():
     #playlistSongs = getPlaylistSongs(temp)
     
     con = getSpotifySongs(con)
-    
-    '''
-    songUrlList = urls_and_songs[0]
-    songMaybeNotWorking = urls_and_songs[1]
-    with open('songs.pickle', 'wb') as handle:
-        pickle.dump(songMaybeNotWorking, handle)
-    with open('songs.pickle', 'rb') as handle:
-        songMaybeNotWorking = pickle.load(handle)
-    #songUrlList = []
 
-    with open(pickleFileName, 'wb') as handle:
-        pickle.dump(songUrlList, handle)
-    
-    with open(pickleFileName, 'rb') as handle:
-        songUrlList = pickle.load(handle)
-    
-    #for song in songUrlList:
-    #    print(song)
-    
-
-    
-    with open('Lyrics/lyricPages.txt', 'w') as f:
-        for url in songUrlList:
-            f.write(url + '\n')
-    '''
 
     #pickled and opened because this is a long process and i wanted to test and play with the code-
     #-Without webcrawling and geneerating every run
@@ -600,7 +571,7 @@ def main():
         docName = dic.get('Document')
         del dic['Document']
         doc_term_weights = sorted(dic.items(), key=lambda x:x[1], reverse=True)
-        print("\n",docName, ': ', doc_term_weights[:25])
+        #print("\n",docName, ': ', doc_term_weights[:25])
     
     allWords = []
     for dictionary in list_of_tfs:
@@ -610,19 +581,16 @@ def main():
     #Document pops up but it is my palceholder element just to hold the titles of the songs it's not actually the top word
 
     #build knowledge base
-    #buildKnowledgeBase(filesCreated, tf_idf_list)
+    buildKnowledgeBase(con, tf_idf_list)
     
-    
-
+    result = con.execute('SELECT * FROM Song')
+    for row in result.fetchall():
+        print(row['name'], ': ', row['sentiment_Score'])
     
     quit()
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Please enter  as a system arg  pickle file name. (Type \'FirstnameSongs.pickle\')')
-        quit()
-    else:
-        main()
+    main()
 
 
 
