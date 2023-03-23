@@ -120,11 +120,12 @@ def getSpotifyPlaylists():
 
 
 
-def getPlaylistSongs(trackUrlList):
+def getPlaylistSongs(trackUrlList, connection):
     MyOffset = 0
     songs = []
     urlList = []
     songDict = {}
+    temp = {}
     moreSongs = True
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth())
@@ -138,7 +139,7 @@ def getPlaylistSongs(trackUrlList):
                 if item['is_local']:    #Skip local files
                     continue
                 #print(item['track']['name'], ': ', item['track']['artists'][0]['name'])
-                temp = [item['track']['name'], item['track']['artists'][0]['name']]
+                temp = {'name': item['track']['name'], 'artist': item['track']['artists'][0]['name']}
                 songs.append(temp)
         
             if len(results['items']) < 10:
@@ -157,12 +158,13 @@ def getPlaylistSongs(trackUrlList):
 
     songs = setMaker   #tested, it works
 
-    holder = processSongs(songs, urlList, songDict)
-    urlList = holder[0] 
-    songDict = holder[1]
-    
+    connection = processSongs(songs, connection)
+   
+    result = connection.execute('SELECT * FROM Song')
+    for row in result.fetchall():
+        print(row['name'], ' - ', row['artist'])
 
-    return urlList, songDict
+    return connection
 
 
 def getSpotifySongs(connection):
@@ -277,7 +279,7 @@ def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, connection):
         #return '-1'
         #CHECKPOINT
         Myurl = 'https://genius.com/artists/' + artistJustInCase
-        print('ULR BREAK LINE: ', Myurl)
+        print('INVALID ULR, instead TRYING: ', Myurl)
         req = Request(url=Myurl, headers=Myheaders)
         try:
             html = urlopen(req).read().decode('utf-8')
@@ -540,8 +542,8 @@ def main():
     
         #albumList = getSpotifyAlbums(50)
         #print(albumList, '\n', len(albumList))
-    #temp = getSpotifyPlaylists()
-    #playlistSongs = getPlaylistSongs(temp)
+    temp = getSpotifyPlaylists()
+    con = getPlaylistSongs(temp, con)
     
     con = getSpotifySongs(con)
 
