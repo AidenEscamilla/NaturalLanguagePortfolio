@@ -18,34 +18,47 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from spotipy.oauth2 import SpotifyOAuth
 import unicodedata
 import linecache
+import sqlite3
 
-def processSongs(songList, urlList, songDict):
+def processSongs(songList, cursor):
     url = "https://genius.com/"
+    cur = cursor
 
     for song in songList:
-        song[1] = re.sub('[/](?=[0-9])', '-', song[1])
-        song[1] = re.sub('[Ff]eat.*', '', song[1])     #fixes formating from song titles
-        song[1] = re.sub('\'|[?.!$+,/]|\(feat*\)|[()]', '', song[1])
-        song[1] = re.sub('[&]', 'and', song[1])
-        song[1] = re.sub('[:]', '-', song[1])
-        song[0] = re.sub('[/](?=[0-9])', '-', song[0])
-        song[0] = re.sub('[Ff]eat.*', '', song[0])     #fixes formating from song titles
-        song[0] = re.sub('\'|[?.!,+$/]|\(feat*\)|[()]', '', song[0])     #fixes formating from song titles
-        song[0] = re.sub('[&]', 'and', song[0])
-        song[0] = re.sub('[:]', '-', song[0])
-        artist = song[1].split(' ')
+        #print(song)
+        artist = song.get('artist')
+        title = song.get('name')
+
+        artist = re.sub('[/](?=[0-9])', '-', artist)
+        artist = re.sub('[Ff]eat.*', '', artist)     #fixes formating from song titles
+        artist = re.sub('\'|[?.!$+,/]|\(feat*\)|[()]', '', artist)
+        artist = re.sub('[&]', 'and', artist)
+        artist = re.sub('[:]', '-', artist)
+
+        title = re.sub('[/](?=[0-9])', '-', title)
+        title = re.sub('[Ff]eat.*', '', title)     #fixes formating from song titles
+        title = re.sub('\'|[?.!,+$/]|\(feat*\)|[()]', '', title)     #fixes formating from song titles
+        title = re.sub('[&]', 'and', title)
+        title = re.sub('[:]', '-', title)
+
+        artist = artist.split(' ')
         artist = '-'.join(artist).lower()
         artist = re.sub('-[*-]', '', artist)
-        title = song[0].split(' ')
+
+        title = title.split(' ')
         title = '-'.join(title).lower()
         title = re.sub('-[*-]', '', title)
-        tokens = (song[1] + ' ' + song[0]).split()
+
+        tokens = (artist + ' ' + title).split()
         urlString = url + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
         urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
-        urlList.append(urlString)
-        songDict[urlString] = [artist, title]
 
-    return urlList, songDict
+        song['url'] = urlString
+        song['sentiment_Score'] = None
+        cur.execute("INSERT OR REPLACE INTO Song VALUES(:url, :name, :artist, :sentiment_Score)",song)
+        cur.commit()
+    
+    return cur
 
 
 def getSpotifyArtists(trackLimit):
@@ -152,7 +165,7 @@ def getPlaylistSongs(trackUrlList):
     return urlList, songDict
 
 
-def getSpotifySongs():
+def getSpotifySongs(connection):
     songs = []
     urlList = []
     songDict = {}
@@ -161,35 +174,31 @@ def getSpotifySongs():
     scope = "user-library-read"
     counter = 0
     #CHANGE COUNTER FOR MORE SONGS IN LIBRARY
-
+    
+    
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
     while moreSongs:
         
-        results = sp.current_user_saved_tracks(limit=10, offset=songOffset)
+        results = sp.current_user_saved_tracks(limit=25, offset=songOffset)
         for item in results['items']:
             track = item['track']
-            temp = [track['name'], track['artists'][0]['name']]
+            temp = {'name': track['name'], 'artist': track['artists'][0]['name']}
             songs.append(temp)
             counter += 1
-        if len(results['items']) < 10 and counter < 25:
+        if len(results['items']) < 10 or counter >= 25:
             moreSongs = False
         else:
+            print(counter)
             print('OffSet = ', songOffset, 'len(items): ', len(results['items']))
             print(songs[9 + songOffset])
-            songOffset += 10
+            songOffset += 25
         
 
     
-    holder = processSongs(songs, urlList, songDict)
-
-    #readability
-    urlList = holder[0] 
-    songDict = holder[1]
-
-        
-
-    return urlList, songDict
+    connection = processSongs(songs, connection)    
+    
+    return connection
 
 
 
@@ -227,11 +236,26 @@ def filterPageAppend(soup, outputFileName, filterString, moreFilterString):
                 if link_str.startswith('http') and 'google' not in link_str:
                     f.write(link_str + '\n')
 
-def getSoupFromWebsite(urlString, songNotWorking):
+def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, connection):
 
     Myheaders = {'User-Agent': 'AppleWebKit/537.36'}
-    artistJustInCase = songNotWorking[0]
-    SongTitleJustInCase = songNotWorking[1]
+    notFound = {'url': urlString, 'name': OriginalTitle, 'artist': OriginalArtist}
+
+    artist = OriginalArtist.split(' ')
+    artist = '-'.join(artist).lower()
+    artist = re.sub('-[*-]', '', artist)
+    artistJustInCase = artist
+
+    title = OriginalTitle.split(' ')
+    title = '-'.join(title).lower()
+    title = re.sub('-[*-]', '', title)
+    SongTitleJustInCase = title
+
+    #tokens = (artist + ' ' + title).split()
+    #urlString = url + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
+    #urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
+
+
 
     Myurl = urlString
     if not Myurl.isascii():
@@ -252,7 +276,8 @@ def getSoupFromWebsite(urlString, songNotWorking):
         #        f.write(Myurl + '\n')
         #return '-1'
         #CHECKPOINT
-        Myurl = 'https://genius.com/' + artistJustInCase
+        Myurl = 'https://genius.com/artists/' + artistJustInCase
+        print('ULR BREAK LINE: ', Myurl)
         req = Request(url=Myurl, headers=Myheaders)
         try:
             html = urlopen(req).read().decode('utf-8')
@@ -277,12 +302,17 @@ def getSoupFromWebsite(urlString, songNotWorking):
             return soup
         
         except urllib.error.HTTPError as e:
-            with open('NotWorkingLinks.txt', 'a') as f:
-                f.write(urlString + '\n')
+            notFound['error'] = 'urllib.error.HTTPError'
+            #connection.execute('UPDATE Song_Not_Found SET name = ?, artist = ?, error = ? WHERE url= ?', (notFound['name'], notFound['artist'], notFound['error'], notFound['url']))
+            connection.execute('INSERT OR REPLACE INTO Song_Not_Found VALUES( :name, :artist, :error, :url)', notFound)
+            connection.commit()
             return '-1'
         except UnicodeEncodeError as typo:
-            with open('NotWorkingLinks.txt', 'a') as f:
-                f.write(urlString + '\n')
+            notFound['error'] = 'UnicodeEncodeError'
+            #connection.execute('UPDATE Song_Not_Found SET name = ?, artist = ?, error = ? WHERE url= ?', (notFound['name'], notFound['artist'], notFound['error'], notFound['url']))
+
+            connection.execute('INSERT OR REPLACE INTO Song_Not_Found VALUES(:name, :artist, :error, :url)', notFound)
+            connection.commit()
             return '-1'
         
     #except requests.exceptions.ConnectionError as errc:
@@ -302,26 +332,16 @@ def getSoupFromWebsite(urlString, songNotWorking):
     return soup
 
 
-def generateLyricFiles(urlsFile, songNotWorking):
-    filesMade = []
-   
-    with open(urlsFile, 'r') as f:
-        LyricUrls = f.read().splitlines()
+def generateLyricFiles(con):
 
-    open('NotWorkingLinks.txt', "w").close()
-    for i, url in enumerate(LyricUrls):
-        print(url)
-        print('DictGet: ', songNotWorking.get(url))
-        lyricSoup = getSoupFromWebsite(url, songNotWorking.get(url))
-
+    for row in con.execute('SELECT * FROM Song'):
+        #print('DictGet: ', songNotWorking.get(url))
+        lyricSoup = getSoupFromWebsite(row['url'], row['name'], row['artist'], con)
+        
         if lyricSoup == '-1':       #Skip 404's
             #print('skipped: ', url)
             continue
-
-        fileName = 'Lyrics: ' + lyricSoup.find('h1').getText() + '.txt'
-        fileName = fileName.replace('/', '_')
-        fileName = 'Lyrics/' + fileName
-        filesMade.append(fileName)
+        
         containers = lyricSoup.findAll('div', {"data-lyrics-container": True})
 
         text = ''
@@ -331,7 +351,7 @@ def generateLyricFiles(urlsFile, songNotWorking):
 
         #txt clean up
         text = re.sub('\[[^\]]*\]', '', text)               #Delete everything between [] including brackets like '[Verse 1]', '[Chrous]', ect.
-        text = re.sub('(?<=[?])(?=[A-Z])', ' ', text)      #fixes lines that end in ?
+        text = re.sub('(?<=[?!])(?=[A-Z])', '. ', text)      #fixes lines that end in ?
         text = re.sub('\'(?=[A-Z])', '. ', text)         #Fixes country ' thats used to start a word e.x: 'Cause
         text = re.sub('(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z])', '. ', text)         #space out text because the <br /> is thrown away leaving words touching and hard to tokenize. Buuut you can seperate by capital letters because every new line they capitalize
         text = text.replace('wanna', 'want to')         #Fix wanna to want to
@@ -343,29 +363,39 @@ def generateLyricFiles(urlsFile, songNotWorking):
         #print(text)
         text = sent_tokenize(text)
         
+        
+        
+        lyricsOutput = ''
+        for sentence in text:
+            lyricsOutput += sentence + " "
 
-        with open(fileName, 'w') as outputFile:
-            for sentence in text:
-                outputFile.write(sentence + " ")
+        temp = {'url': row['url'], 'lyrics': lyricsOutput}
+        res = con.execute('INSERT OR REPLACE INTO Lyrics VALUES(:lyrics, :url)', (temp))
+        con.commit()
+        
 
-    return filesMade
+    return con
 
 #Term frequency (TF) is how often a token appears in a document 
-def createTF(documentFile):
+def createTF(songGiven, connection):
     tokens = []
     stop_words = set(stopwords.words('english'))
     tf_dict = {}
-    with open(documentFile, 'r') as f:
-        lines = f.read().splitlines()   
-        for line in lines:      #for eevry line tokenize 
-            tokens += word_tokenize(line.lower())
     
-        tokens = [w for w in tokens if w.isalpha() and w not in stop_words] #get clean tokens #This w.isalpha() messes up apostrophies need to fix that
+
+    #cleanedLyrics = re.sub('!', '. ', songGiven['lyrics'])
+    #cleanedLyrics = re.sub('?', '. ', cleanedLyrics)
+    cleanedLyrics = songGiven['lyrics'].split('.')
+
+    for line in cleanedLyrics:      #for eevry line tokenize 
+        tokens += word_tokenize(line.lower())
     
-        token_set = set(tokens)
-        tf_dict = {t:tokens.count(t) for t in token_set}   #create dict
-        for token in tf_dict.keys():
-            tf_dict[token] = tf_dict[token] / len(tokens)   #calc requency
+    tokens = [w for w in tokens if w.isalpha() and w not in stop_words] #get clean tokens #This w.isalpha() messes up apostrophies need to fix that
+    
+    token_set = set(tokens)
+    tf_dict = {t:tokens.count(t) for t in token_set}   #create dict
+    for token in tf_dict.keys():
+        tf_dict[token] = tf_dict[token] / len(tokens)   #calc requency
     
     return tf_dict
 #tf * idf is similar to an inportance measure for a token based on your corpus (training data)
@@ -379,13 +409,24 @@ def create_tfidf(tf, idf):
     return tf_idf
 
 
-def createTF_IDF_TfxIdf(filesIn):
-    num_docs = len(filesIn)
+def createTF_IDF_TfxIdf(connection):
+    con = connection
+    res = con.execute('SELECT Count(*) FROM Song')
+    num_docs = int(res.fetchone()[0])
+    print(num_docs)
     #create tf dictionaries
     tf = []
-    for cleanFileName in filesIn:
-        temp = createTF(cleanFileName)
-        temp['Document'] = cleanFileName
+
+    result = con.execute('SELECT lyrics FROM Lyrics')
+    rows = result.fetchall()
+    for i, row in enumerate(rows):
+        print(i, ':###### ', row['lyrics'])
+
+    res = con.execute('SELECT * FROM Song INNER JOIN Lyrics ON Song.url = Lyrics.url')
+    for i, song in enumerate(res.fetchall()):
+        print(i, 'SONG: ', song['name'], " - ", song['artist'])
+        temp = createTF(song, con)
+        temp['Document'] = song['url']
         tf.append(temp)
     
     #create vocab
@@ -487,7 +528,16 @@ def buildKnowledgeBase(filesCreated, term_Importance_list):
 
 def main():
     ssl._create_default_https_context = ssl._create_unverified_context
-    
+    con = sqlite3.connect("Songs.db")
+    con.row_factory = sqlite3.Row
+    #con.execute('DROP TABLE Song_Not_Found')
+    con.execute('DROP TABLE Lyrics')
+    con.execute("PRAGMA foreign_keys = ON")
+    con.execute("CREATE TABLE IF NOT EXISTS Song(url PRIMARY KEY, name, artist, sentiment_Score)")
+    con.execute("CREATE TABLE IF NOT EXISTS Song_Not_Found(name, artist, error, url, FOREIGN KEY(url) REFERENCES Song (url))")
+    con.execute("CREATE TABLE IF NOT EXISTS Lyrics(lyrics, url, FOREIGN KEY(url) REFERENCES Song(url))")
+
+
         #num_songs = int(sys.argv[1])
     pickleFileName = sys.argv[1]
         #artistList = getSpotifyArtists(50)
@@ -495,10 +545,12 @@ def main():
     
         #albumList = getSpotifyAlbums(50)
         #print(albumList, '\n', len(albumList))
-    temp = getSpotifyPlaylists()
-    playlistSongs = getPlaylistSongs(temp)
+    #temp = getSpotifyPlaylists()
+    #playlistSongs = getPlaylistSongs(temp)
+    
+    con = getSpotifySongs(con)
+    
     '''
-    urls_and_songs = getSpotifySongs()
     songUrlList = urls_and_songs[0]
     songMaybeNotWorking = urls_and_songs[1]
     with open('songs.pickle', 'wb') as handle:
@@ -521,20 +573,20 @@ def main():
     with open('Lyrics/lyricPages.txt', 'w') as f:
         for url in songUrlList:
             f.write(url + '\n')
-    
+    '''
 
     #pickled and opened because this is a long process and i wanted to test and play with the code-
     #-Without webcrawling and geneerating every run
     #CHECKPOINT
-    filesCreated = generateLyricFiles('Lyrics/lyricPages.txt', songMaybeNotWorking)
+    con = generateLyricFiles(con)
     
-    with open('files.pickle', 'wb') as handle:
-        pickle.dump(filesCreated, handle)
+    #res = con.execute("SELECT * FROM Lyrics")
+    #res = con.execute('SELECT COUNT(*) FROM Song')
+    #for row in res.fetchall():
+    #    print(row['url'], ': ', row['lyrics'], '\n\n')
+
     
-    with open('files.pickle', 'rb') as handle:
-        filesCreated = pickle.load(handle)
-    
-    holdResults = createTF_IDF_TfxIdf(filesCreated)
+    holdResults = createTF_IDF_TfxIdf(con)
     list_of_tfs = holdResults[0]
     idf_dictionary = holdResults[1]
     tf_idf_list = holdResults[-1]
@@ -548,7 +600,7 @@ def main():
         docName = dic.get('Document')
         del dic['Document']
         doc_term_weights = sorted(dic.items(), key=lambda x:x[1], reverse=True)
-        #print("\n",docName, ': ', doc_term_weights[:25])
+        print("\n",docName, ': ', doc_term_weights[:25])
     
     allWords = []
     for dictionary in list_of_tfs:
@@ -558,11 +610,11 @@ def main():
     #Document pops up but it is my palceholder element just to hold the titles of the songs it's not actually the top word
 
     #build knowledge base
-    buildKnowledgeBase(filesCreated, tf_idf_list)
+    #buildKnowledgeBase(filesCreated, tf_idf_list)
     
     
 
-    '''
+    
     quit()
 
 if __name__ == '__main__':
@@ -598,6 +650,4 @@ if __name__ == '__main__':
         albumSoup = getSoupFromWebsite(album)
         #print('\nNEW LINE\n')                         #CHANGE ARTIST NAME BELOW THE HASHTAG Edit: changed to sys arg input variable
         filterPageAppend(albumSoup, 'lyricPages.txt', artistNameFromInput, 'lyrics')
-
-
-'''
+#'''
