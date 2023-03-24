@@ -505,7 +505,7 @@ def buildKnowledgeBase(connection, term_Importance_list):
             weightedTotal += Wscore
 
         if len(sentences) != 0:     #need this iff statment because some songs are found and files are made but they are instrumentals with no lyrics
-            connection.execute('INSERT OR REPLACE INTO Song VALUES(:url, :name, :artist, :sentiment_Score)', (song['url'], song['name'], song['artist'], weightedTotal))
+            connection.execute('INSERT OR REPLACE INTO Song VALUES(:url, :name, :artist, :sentiment_Score)', (song['url'], song['name'], song['artist'], weightedTotal/len(weightedScores)))
             connection.commit()
     #counter = 0
     #for pair in knowledge:
