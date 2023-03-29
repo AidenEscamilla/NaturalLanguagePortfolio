@@ -8,7 +8,7 @@ import nltk #maybe un needed
 from nltk.tokenize import sent_tokenize
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-import pickle
+from songs import Songs # my class file
 import math
 from nltk.sentiment import SentimentIntensityAnalyzer
 import sys  # to get the system parameter
@@ -20,9 +20,9 @@ import unicodedata
 import linecache
 import sqlite3
 
-def processSongs(songList, cursor):
+def processSongs(songList, SongDb):
     url = "https://genius.com/"
-    cur = cursor
+    db = SongDb
 
     for song in songList:
         #print(song)
@@ -54,11 +54,7 @@ def processSongs(songList, cursor):
         urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
 
         song['url'] = urlString
-        song['sentiment_Score'] = None
-        cur.execute("INSERT OR REPLACE INTO Song VALUES(:url, :name, :artist, :sentiment_Score)",song)
-        cur.commit()
-    
-    return cur
+        db.insertSong(song)
 
 
 def getSpotifyArtists(trackLimit):
@@ -79,20 +75,79 @@ def getSpotifyArtists(trackLimit):
     return [*set(artist)]
 
 
-def getSpotifyAlbums(trackLimit):
-    albums = []
+def getSpotifyAlbums():
+    albumIds = []
+    AlbumOffset = 0
+    moreAlbums = True
+    counter = 0
     scope = "user-library-read"
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    results = sp.current_user_saved_tracks(limit=trackLimit)
-    for item in results['items']:
-        track = item['track']
-        albums.append(track['album']['name'])
+    while moreAlbums:
+        results = sp.current_user_saved_albums(limit=10, offset=AlbumOffset)
+        print(results)
+        if len(results['items']) < 10:
+            moreAlbums = False
+
+        for i, album in enumerate(results['items']):
+            print(i, ': ', album['album']['name'], '\n', album['album']['tracks']['href'], '\n') 
+            albumIds.append(album['album']['id'])          
+        print('LINE: ', AlbumOffset/10)
+        AlbumOffset += 10
         
 
+    print("ALBUM_IDS = ", albumIds)
+    return albumIds
 
-    return [*set(albums)]
+
+def getAlbumSongs(AlbumIDList, songDB):
+    MyOffset = 0
+    songs = []
+    urlList = []
+    songDict = {}
+    temp = {}
+    moreSongs = True
+    scope = "user-library-read"
+
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+    for album in AlbumIDList:
+        #print('PLAYLIST: ', playlist)
+        
+        while moreSongs:
+            print("ALBUM ID = ", album)
+            results = sp.album_tracks(album_id=album, limit=10, offset=MyOffset)
+            
+            for item in results['items']:
+                if item['is_local']:    #Skip local files
+                    continue
+                print(item['name'], ': ', item['artists'][0]['name'])
+                temp = {'name': item['name'], 'artist': item['artists'][0]['name']}
+                songs.append(temp)
+
+            if len(results['items']) < 10:
+                MyOffset = 0
+                moreSongs = False
+            else:
+                MyOffset += 10
+
+        moreSongs = True
+
+
+    #make a set of songs before processing
+    setMaker = []
+    for song in songs:
+        if not song in setMaker:
+            setMaker.append(song)
+
+    songs = setMaker   #tested, it works
+    print("\nSONGS = \n", songs)
+    processSongs(songs, songDB)
+   
+    #result = songDB.getAllSongs()
+   
+    return songs
+
 
 def getSpotifyPlaylists():
     morePlaylists = True
@@ -107,20 +162,20 @@ def getSpotifyPlaylists():
         
         if len(results['items']) < 10:
             morePlaylists = False
-        else:
-            for i, playlist in enumerate(results['items']):
+
+        for i, playlist in enumerate(results['items']):
                 #print(i, ': ', playlist['name'], '\n', playlist['tracks']['href'], '\n') 
-                playlistsTracksUrls.append(playlist['id'])          
-            print('LINE: ', MyOffset/10)
-            MyOffset += 10
+            playlistsTracksUrls.append(playlist['id'])          
+        print('LINE: ', MyOffset/10)
+        MyOffset += 10
 
         
-
+    print("PLAYLISTS = ", playlistsTracksUrls)
     return playlistsTracksUrls
 
 
 
-def getPlaylistSongs(trackUrlList, connection):
+def getPlaylistSongs(trackUrlList, songDB):
     MyOffset = 0
     songs = []
     urlList = []
@@ -158,16 +213,16 @@ def getPlaylistSongs(trackUrlList, connection):
 
     songs = setMaker   #tested, it works
 
-    connection = processSongs(songs, connection)
+    processSongs(songs, songDB)
    
-    result = connection.execute('SELECT * FROM Song')
-    for row in result.fetchall():
-        print(row['name'], ' - ', row['artist'])
+    #result = connection.execute('SELECT * FROM Song')
+    #for row in result.fetchall():
+    #    print(row['name'], ' - ', row['artist'])
 
-    return connection
+    return songs
 
 
-def getSpotifySongs(connection):
+def getSpotifySongs(SongDb):
     songs = []
     urlList = []
     songDict = {}
@@ -198,9 +253,9 @@ def getSpotifySongs(connection):
         
 
     
-    connection = processSongs(songs, connection)    
+    processSongs(songs, SongDb)    
     
-    return connection
+    return songs
 
 
 
@@ -238,7 +293,7 @@ def filterPageAppend(soup, outputFileName, filterString, moreFilterString):
                 if link_str.startswith('http') and 'google' not in link_str:
                     f.write(link_str + '\n')
 
-def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, connection):
+def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, songDB):
 
     Myheaders = {'User-Agent': 'AppleWebKit/537.36'}
     notFound = {'url': urlString, 'name': OriginalTitle, 'artist': OriginalArtist}
@@ -274,10 +329,7 @@ def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, connection):
         html = urlopen(req).read().decode('utf-8')
         
     except urllib.error.HTTPError as errh:
-        #with open('NotWorkingLinks.txt', 'a') as f:
-        #        f.write(Myurl + '\n')
-        #return '-1'
-        #CHECKPOINT
+ 
         Myurl = 'https://genius.com/artists/' + artistJustInCase
         print('INVALID ULR, instead TRYING: ', Myurl)
         req = Request(url=Myurl, headers=Myheaders)
@@ -306,17 +358,15 @@ def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, connection):
         except urllib.error.HTTPError as e:
             notFound['error'] = 'urllib.error.HTTPError'
             #connection.execute('UPDATE Song_Not_Found SET name = ?, artist = ?, error = ? WHERE url= ?', (notFound['name'], notFound['artist'], notFound['error'], notFound['url']))
-            connection.execute('INSERT OR REPLACE INTO Song_Not_Found VALUES( :name, :artist, :error, :url)', notFound)
-            connection.commit()
+            songDB.insertToNotFound(notFound)
             return '-1'
         except UnicodeEncodeError as typo:
             notFound['error'] = 'UnicodeEncodeError'
             #connection.execute('UPDATE Song_Not_Found SET name = ?, artist = ?, error = ? WHERE url= ?', (notFound['name'], notFound['artist'], notFound['error'], notFound['url']))
 
-            connection.execute('INSERT OR REPLACE INTO Song_Not_Found VALUES(:name, :artist, :error, :url)', notFound)
-            connection.commit()
+            songDB.insertToNotFound(notFound)
             return '-1'
-        
+    
     #except requests.exceptions.ConnectionError as errc:
     #    print ("Error Connecting:",errc)
     #except requests.exceptions.Timeout as errt:
@@ -334,11 +384,11 @@ def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, connection):
     return soup
 
 
-def generateLyricFiles(con):
+def generateLyricFiles(songDataBase, newSongsList):
 
-    for row in con.execute('SELECT * FROM Song'):
+    for song in newSongsList:
         #print('DictGet: ', songNotWorking.get(url))
-        lyricSoup = getSoupFromWebsite(row['url'], row['name'], row['artist'], con)
+        lyricSoup = getSoupFromWebsite(song.get('url'), song.get('name'), song.get('artist'), songDataBase)
         
         if lyricSoup == '-1':       #Skip 404's
             #print('skipped: ', url)
@@ -371,15 +421,13 @@ def generateLyricFiles(con):
         for sentence in text:
             lyricsOutput += sentence + " "
 
-        temp = {'url': row['url'], 'lyrics': lyricsOutput}
-        res = con.execute('INSERT OR REPLACE INTO Lyrics VALUES(:lyrics, :url)', (temp))
-        con.commit()
-        
+        temp = {'url': song.get('url'), 'lyrics': lyricsOutput}
+        songDataBase.insertToLyrics(temp)
+    
 
-    return con
 
 #Term frequency (TF) is how often a token appears in a document 
-def createTF(songGiven, connection):
+def createTF(songGiven, songDB):
     tokens = []
     stop_words = set(stopwords.words('english'))
     tf_dict = {}
@@ -411,10 +459,10 @@ def create_tfidf(tf, idf):
     return tf_idf
 
 
-def createTF_IDF_TfxIdf(connection):
-    con = connection
-    res = con.execute('SELECT Count(*) FROM Song')
-    num_docs = int(res.fetchone()[0])
+def createTF_IDF_TfxIdf(songDB):
+
+    rows = songDB.getAllSongs()
+    num_docs = int(len(rows))
     print(num_docs)
     #create tf dictionaries
     tf = []
@@ -423,12 +471,12 @@ def createTF_IDF_TfxIdf(connection):
     #rows = result.fetchall()
     #for i, row in enumerate(rows):
     #    print(i, ':###### ', row['lyrics'])
-
-    res = con.execute('SELECT * FROM Song INNER JOIN Lyrics ON Song.url = Lyrics.url')
-    for i, song in enumerate(res.fetchall()):
-        print(i, 'SONG: ', song['name'], " - ", song['artist'])
-        temp = createTF(song, con)
-        temp['Document'] = song['url']
+    #maybe prob here
+    songs = songDB.getAllWithLyrics()
+    for i, songRow in enumerate(songs):
+        print(i, 'SONG: ', songRow['name'], " - ", songRow['artist'])
+        temp = createTF(songRow, songDB)
+        temp['Document'] = songRow['url']
         tf.append(temp)
     
     #create vocab
@@ -505,7 +553,7 @@ def buildKnowledgeBase(connection, term_Importance_list):
             weightedTotal += Wscore
 
         if len(sentences) != 0:     #need this iff statment because some songs are found and files are made but they are instrumentals with no lyrics
-            connection.execute('INSERT OR REPLACE INTO Song VALUES(:url, :name, :artist, :sentiment_Score)', (song['url'], song['name'], song['artist'], weightedTotal/len(weightedScores)))
+            connection.execute('UPDATE Song SET sentiment_Score = ? WHERE url = ?', (weightedTotal/len(weightedScores), song['url']))
             connection.commit()
     #counter = 0
     #for pair in knowledge:
@@ -525,16 +573,7 @@ def buildKnowledgeBase(connection, term_Importance_list):
 
 
 def main():
-    ssl._create_default_https_context = ssl._create_unverified_context
-    con = sqlite3.connect("Songs.db")
-    con.row_factory = sqlite3.Row
-    #con.execute('DROP TABLE Song_Not_Found')
-    con.execute('DROP TABLE Lyrics')
-    con.execute("PRAGMA foreign_keys = ON")
-    con.execute("CREATE TABLE IF NOT EXISTS Song(url PRIMARY KEY, name, artist, sentiment_Score)")
-    con.execute("CREATE TABLE IF NOT EXISTS Song_Not_Found(name, artist, error, url, FOREIGN KEY(url) REFERENCES Song (url))")
-    con.execute("CREATE TABLE IF NOT EXISTS Lyrics(lyrics, url, FOREIGN KEY(url) REFERENCES Song(url))")
-
+    SongDb = Songs()
 
 
         #artistList = getSpotifyArtists(50)
@@ -542,16 +581,24 @@ def main():
     
         #albumList = getSpotifyAlbums(50)
         #print(albumList, '\n', len(albumList))
-    temp = getSpotifyPlaylists()
-    con = getPlaylistSongs(temp, con)
     
-    con = getSpotifySongs(con)
+    AlbumIDList = getSpotifyAlbums()
+    albumSongsList = getAlbumSongs(AlbumIDList, SongDb)
+    
+    playlistIDList = getSpotifyPlaylists()
+    playlistSongsList = getPlaylistSongs(playlistIDList, SongDb)
+    
+    savedSongsList = getSpotifySongs(SongDb)
 
+
+    
+    newUserSongs = albumSongsList[:10] + playlistSongsList[:10] + savedSongsList[:10]
 
     #pickled and opened because this is a long process and i wanted to test and play with the code-
     #-Without webcrawling and geneerating every run
     #CHECKPOINT
-    con = generateLyricFiles(con)
+
+    generateLyricFiles(SongDb, newUserSongs)
     
     #res = con.execute("SELECT * FROM Lyrics")
     #res = con.execute('SELECT COUNT(*) FROM Song')
@@ -559,7 +606,7 @@ def main():
     #    print(row['url'], ': ', row['lyrics'], '\n\n')
 
     
-    holdResults = createTF_IDF_TfxIdf(con)
+    holdResults = createTF_IDF_TfxIdf(SongDb)
     list_of_tfs = holdResults[0]
     idf_dictionary = holdResults[1]
     tf_idf_list = holdResults[-1]
@@ -582,6 +629,7 @@ def main():
     print('\n\nMy top 10 terms', fd.most_common(11))
     #Document pops up but it is my palceholder element just to hold the titles of the songs it's not actually the top word
 
+    quit()
     #build knowledge base
     buildKnowledgeBase(con, tf_idf_list)
     
