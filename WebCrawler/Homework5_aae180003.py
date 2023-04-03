@@ -592,7 +592,7 @@ def main():
 
 
     
-    newUserSongs = albumSongsList[:10] + playlistSongsList[:10] + savedSongsList[:10]
+    newUserSongs = albumSongsList + playlistSongsList + savedSongsList
 
     #pickled and opened because this is a long process and i wanted to test and play with the code-
     #-Without webcrawling and geneerating every run
