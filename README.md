@@ -82,3 +82,9 @@ Do be careful trying to run this code because it creates a file for ever song it
 
 See the code [here](WebCrawler/Homework5_aae180003.py)
 You can read the find and example chatbot dialogue [here](WebCrawler/Webcrawler_Findings.pdf)
+
+## Text Classification
+
+Here we were trying different methods at classification. From Naive Bayes, to logistical regression, to neural network. I used a data set where someone tried to categorize poems into 4 categories. Those classifications being death, affection, environment, music. I couldn't get much higher than 40% accuracy for Naive Bayes but I am impressed it even got that far. Poems are very open for interpretation and it seems like the classification prediction got lost in the bag of words approach. Preserving the word order might prove to be more accurate.
+
+See the colab notebook [here](TextClassification/TextClassification_ipynb.pdf)
