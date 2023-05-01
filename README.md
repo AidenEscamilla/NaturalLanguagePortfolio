@@ -83,8 +83,20 @@ Do be careful trying to run this code because it creates a file for ever song it
 See the code [here](WebCrawler/Homework5_aae180003.py)
 You can read the find and example chatbot dialogue [here](WebCrawler/Webcrawler_Findings.pdf)
 
+
 ## Text Classification
 
 Here we were trying different methods at classification. From Naive Bayes, to logistical regression, to neural network. I used a data set where someone tried to categorize poems into 4 categories. Those classifications being death, affection, environment, music. I couldn't get much higher than 40% accuracy for Naive Bayes but I am impressed it even got that far. Poems are very open for interpretation and it seems like the classification prediction got lost in the bag of words approach. Preserving the word order might prove to be more accurate.
 
 See the colab notebook [here](TextClassification/TextClassification_ipynb.pdf)
+
+
+## Chat bot
+
+This my attempt at a utility chat bot similar to a bot that is only good at one thing like helping with an application. It starts with easy recommendations like random songs from the database or lets you choose a category that i've created arbitrarily. Hopefully I can use topic modeling from class to create user specific topics/Categories and use that Category function to choose from those predicted category labels.
+The 'meat and potatoes' of the bot is the last function that recommends the user songs based on their own spotify. After collecting every song the user follows and adding that to an SQLite database, the program webcrawls genius.com for song lyrics, creates a tf_idf vector space, and returns the top 10 songs closest in the vector space. 
+It takes a bit of time to go through all those steps but after the first menu loop files are pickled in order to greatly improve performance. If the user has a lot of songs, creating the database by webcrawling takes a long long time. But, after the first run through you don't need to create the database again unless there's a new song you want to run through the program.The song recommendations come from a Pandas data frame the holds data from the users spotify, and the spotify million songs .csv file.
+(Note, i'm pretty sure if you want to run the code yourself you have to let me know your spotify email. Also there's a private key needed as an environment variable that I need to figure out how/if i can share that without giving away the info.)
+
+See the code [here](Chatbot/RecommendingRobot.py)
+*Don't forget to download the requirements
