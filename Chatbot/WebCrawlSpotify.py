@@ -196,12 +196,16 @@ def getPlaylistSongs(trackUrlList, songDB):
         #print('PLAYLIST: ', playlist)
         
         while moreSongs:
-            results = sp.playlist_tracks(playlist_id=playlist, fields='items(is_local,track(name,artists(name)))', limit=10, offset=MyOffset)
+            results = sp.playlist_tracks(playlist_id=playlist, fields='items(track(name,artists(name)))', limit=10, offset=MyOffset)
             
             for item in results['items']:
-                if item['is_local']:    #Skip local files
+                # if not item:
+                #     print("Nonetype error: ", item)
+                # elif item['is_local']:    #Skip local files
+                #     continue
+                if not item['track']: #skip empty tracks
                     continue
-                #print(item['track']['name'], ': ', item['track']['artists'][0]['name'])
+
                 temp = {'name': item['track']['name'], 'artist': item['track']['artists'][0]['name']}
                 songs.append(temp)
         
@@ -342,9 +346,10 @@ def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, songDB):
     except urllib.error.HTTPError as errh:
  
         Myurl = 'https://genius.com/artists/' + artistJustInCase
-        print('INVALID ULR, instead TRYING: ', Myurl)
+        #print('INVALID ULR, instead TRYING: ', Myurl)
         req = Request(url=Myurl, headers=Myheaders)
-        try:
+        try:        #Future fix: https://genius.com/artists/{firstName}-{LastName}/songs
+                    #li class = 'ListItem__Containter* get the href ending in lyric containing 'song title''
             html = urlopen(req).read().decode('utf-8')
             soup = BeautifulSoup(html, features="html.parser")
             for script in soup(["script", "style", "html.parser"]):
@@ -593,6 +598,7 @@ def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFla
     
     dfRecSong = {}
     errMessage = 'Sorry, I could not find that song from your library'
+    errMessage2 = 'Sorry, the song wasn\'t found in the vectorized database'
     lyricsRow = []
 
 
@@ -602,6 +608,9 @@ def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFla
             return errMessage
         print(answer['name'], ': ', answer['artist'])
         lyricsRow = SongDatabase.getSpecificWithLyrics(answer['name'], answer['artist'])
+        if lyricsRow == None: #maybe bug found HERE. none lyrics slipping through sql call
+            return errMessage2
+
         dfRecSong['text'] = lyricsRow['lyrics']
         dfRecSong['artist'] = lyricsRow['artist']
         dfRecSong['song'] = lyricsRow['name']
@@ -613,10 +622,13 @@ def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFla
             return errMessage
         print(answer['name'], ': ', answer['artist'])
         lyricsRow = SongDatabase.getSpecificWithLyrics(answer['name'], answer['artist'])
+        if lyricsRow == None:
+            return errMessage2
         dfRecSong['text'] = lyricsRow['lyrics']
         dfRecSong['artist'] = lyricsRow['artist']
         dfRecSong['song'] = lyricsRow['name']
         dfRecSong['link'] = lyricsRow['url']
+
 
     if firstTimeFlag:
 
@@ -638,7 +650,7 @@ def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFla
         #maybe don't need this variable
         X = df.text
         #print(X[0])
-                            #making max_df high gets rid of stopwords, can play wiht this variable and ngrams
+                            #making max_df high gets rid of stopwords, can play with this variable and ngrams
         vectorizer = TfidfVectorizer(max_df=0.7, ngram_range=(2, 4))
         Xtfid = vectorizer.fit_transform(X)
         
@@ -646,37 +658,8 @@ def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFla
             pickle.dump(Xtfid, handle)
         with open('pdDataFrame.pickle', 'wb') as handle:
             pickle.dump(df, handle)
-    '''
-    # read the data
-    df = pd.read_csv('spotify_millsongdata.csv')
-    df = pd.concat([df, dfUser], ignore_index=True)
-    X = df.text
-    millSongInfo = df.song
 
-    # use defaults
-    vectorizer = TfidfVectorizer(max_df=0.4, ngram_range=(1, 3))
-
-    # vectorize
-    Xtfid = vectorizer.fit_transform(X) # fit the corpus data
     
-    with open('millTfidVector.pickle', 'wb') as handle:
-        pickle.dump(Xtfid, handle)
-    
-    with open('millTfidVector.pickle', 'rb') as handle:
-        Xtfid = pickle.load(handle)
-    
-    print('Vector Shape: ', Xtfid.shape, '\n')
-    #print('made your pickle sir')
-    '''
-    
-
-
-    #UnComment this block below for your first time!!
-    #edit: this block needs to run everytime unless I find out how to search the df for song name
-    
-                             
-    
-    #re-comment above after first run through now that your spotify has been vectorized with the dataset
 
 
     with open('millTfidVector.pickle', 'rb') as handle:
@@ -813,8 +796,8 @@ def main():
     quit()
     '''
 if __name__ == '__main__':
-    os.environ["SPOTIPY_CLIENT_ID"] = "PUBLIC"
-    os.environ["SPOTIPY_CLIENT_SECRET"] = "SECRET"
+    os.environ["SPOTIPY_CLIENT_ID"] = "PUBLIC_ID"
+    os.environ["SPOTIPY_CLIENT_SECRET"] = "SECRET_KEY"
     os.environ["SPOTIPY_REDIRECT_URI"] = "https://localhost:8888/callback"
 
     if len(sys.argv) < 2:

@@ -18,6 +18,9 @@ from WebCrawlSpotify import setup
 
 def randomClassifier(SongDatabase):
     song = input('Enter a song (e.x Radioactive by Imagine Dragons): ')
+    while len(song) <= 1:
+        song = input('Please enter a valid song: ')
+
     songData = song.split(" by ")
     #store it
     #print(songData)
@@ -108,8 +111,8 @@ def main():
 
 
 if __name__ == '__main__':
-    os.environ["SPOTIPY_CLIENT_ID"] = "PUBLIC"
-    os.environ["SPOTIPY_CLIENT_SECRET"] = "SECRET"
+    os.environ["SPOTIPY_CLIENT_ID"] = "PUBLIC_ID"
+    os.environ["SPOTIPY_CLIENT_SECRET"] = "SECRET_KEY"
     os.environ["SPOTIPY_REDIRECT_URI"] = "https://localhost:8888/callback"
 
     main()
