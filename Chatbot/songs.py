@@ -2,6 +2,12 @@
 import sqlite3
 import ssl
 
+class MockSongs:
+    def __init__(self) -> None:
+        pass
+
+    def insertToNotFound(self, songNotFound):                                                    #Maybe prob here
+        pass
 
 class Songs:
     def __init__(self):

@@ -274,12 +274,11 @@ def getSpotifySongs(SongDb):
 def filterPage(soup, outputFileName, filterArtist, filterSong):
     with open(outputFileName, 'w') as f:
         for link in soup.find_all('a'):
-            link_str = str(link.get('href'))
-            #print(link_str)
+            link_str = str(link.get('href')).lower()
             tokens = filterSong.split('-')
             for token in tokens:
-                if filterArtist in link_str and token in link_str and 'lyric' in link_str: #or 'front' in link_str:
-                    print('FOUND: ' , link_str, '\n')
+                if filterArtist in link_str and token in link_str and 'lyric' in link_str: 
+                    #print('FOUND: ' , link_str, '\n')
                     if link_str.startswith('/url?q='):
                         link_str = link_str[7:]
                         print('MOD:', link_str)
@@ -305,90 +304,71 @@ def filterPageAppend(soup, outputFileName, filterString, moreFilterString):
                 if link_str.startswith('http') and 'google' not in link_str:
                     f.write(link_str + '\n')
 
-def getSoupFromWebsite(urlString, OriginalTitle, OriginalArtist, songDB):
+def handle_page_not_found(url, title, artist, songDB):
+    headers = {'User-Agent': 'AppleWebKit/537.36'}
+    notFound = {'url': url, 'name': title, 'artist': artist}
 
-    Myheaders = {'User-Agent': 'AppleWebKit/537.36'}
-    notFound = {'url': urlString, 'name': OriginalTitle, 'artist': OriginalArtist}
-
-    artist = OriginalArtist.split(' ')
+    artist = artist.split(' ')
     artist = '-'.join(artist).lower()
     artist = re.sub('-[*-]', '', artist)
-    artistJustInCase = artist
 
-    title = OriginalTitle.split(' ')
+    title = title.split(' ')
     title = '-'.join(title).lower()
     title = re.sub('-[*-]', '', title)
-    SongTitleJustInCase = title
 
-    #tokens = (artist + ' ' + title).split()
-    #urlString = url + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
-    #urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
+    artist_url = 'https://genius.com/artists/' + artist
+    req = Request(url=artist_url, headers=headers)
+    try:        #Future fix: https://genius.com/artists/{firstName}-{LastName}/songs
+                #li class = 'ListItem__Containter* get the href ending in lyric containing 'song title''
+        html = urlopen(req).read().decode('utf-8')
+        soup = BeautifulSoup(html, features="html.parser")
+        for script in soup(["script", "style", "html.parser"]):
+            script.extract()    # rip it out
+        
+        filterPage(soup, 'tryingArtist.txt', artist, title)
+        
+        trying = linecache.getline('tryingArtist.txt', 1)
+        finding_lyrics_url = trying# + '-lyrics'
 
+        if not finding_lyrics_url.startswith('http'):
+            raise urllib.error.HTTPError(url=finding_lyrics_url, code=None, msg='empty', hdrs=headers, fp=None)
 
+        req = Request(url=finding_lyrics_url, headers=headers)
+        html = urlopen(req).read().decode('utf-8')
+        soup = BeautifulSoup(html, features="html.parser")
 
-    Myurl = urlString
-    if Myurl == None:
-        return '-1' #Find out how a None object is getting here
-    elif not Myurl.isascii():
-        #print('in here: ', Myurl)
-        temp = unicodedata.normalize('NFKD', Myurl).encode('Ascii', 'ignore')
-        Myurl = temp.decode('utf-8')
-        #print('result: ', Myurl)
+        for script in soup(["script", "style", "html.parser"]):
+            script.extract()    # rip it out
+        return soup
     
+    except urllib.error.HTTPError as e:
+        notFound['error'] = 'urllib.error.HTTPError'
+        songDB.insertToNotFound(notFound)
+        return '-1'
+    except UnicodeEncodeError as typo:
+        notFound['error'] = 'UnicodeEncodeError'
+        songDB.insertToNotFound(notFound)
+        return '-1'
 
 
+def getSoupFromWebsite(url, title, artist, songDB):
 
-    req = Request(url=Myurl, headers=Myheaders)
+    headers = {'User-Agent': 'AppleWebKit/537.36'}
+
+    if not url:
+        return '-1' #Find out how a None object is getting here
+    elif not url.isascii():
+        temp = unicodedata.normalize('NFKD', url).encode('Ascii', 'ignore')
+        url = temp.decode('utf-8')    
+
+    req = Request(url=url, headers=headers)
     #TRY CATCH 404 ERROR HERE
     try:
         html = urlopen(req).read().decode('utf-8')
         
     except urllib.error.HTTPError as errh:
- 
-        Myurl = 'https://genius.com/artists/' + artistJustInCase
-        #print('INVALID ULR, instead TRYING: ', Myurl)
-        req = Request(url=Myurl, headers=Myheaders)
-        try:        #Future fix: https://genius.com/artists/{firstName}-{LastName}/songs
-                    #li class = 'ListItem__Containter* get the href ending in lyric containing 'song title''
-            html = urlopen(req).read().decode('utf-8')
-            soup = BeautifulSoup(html, features="html.parser")
-            for script in soup(["script", "style", "html.parser"]):
-                script.extract()    # rip it out
-            filterPage(soup, 'tryingArtist.txt', artistJustInCase, SongTitleJustInCase)
-            
-            trying = linecache.getline('tryingArtist.txt', 1)
-            findingLyricsUrl = trying# + '-lyrics'
-
-            if not findingLyricsUrl.startswith('http'):
-                raise urllib.error.HTTPError(url=findingLyricsUrl, code=None, msg='empty', hdrs=Myheaders, fp=None)
-
-            req = Request(url=findingLyricsUrl, headers=Myheaders)
-            html = urlopen(req).read().decode('utf-8')
-            soup = BeautifulSoup(html, features="html.parser")
-
-            for script in soup(["script", "style", "html.parser"]):
-                script.extract()    # rip it out
-
-            return soup
-        
-        except urllib.error.HTTPError as e:
-            notFound['error'] = 'urllib.error.HTTPError'
-            #connection.execute('UPDATE Song_Not_Found SET name = ?, artist = ?, error = ? WHERE url= ?', (notFound['name'], notFound['artist'], notFound['error'], notFound['url']))
-            songDB.insertToNotFound(notFound)
-            return '-1'
-        except UnicodeEncodeError as typo:
-            notFound['error'] = 'UnicodeEncodeError'
-            #connection.execute('UPDATE Song_Not_Found SET name = ?, artist = ?, error = ? WHERE url= ?', (notFound['name'], notFound['artist'], notFound['error'], notFound['url']))
-
-            songDB.insertToNotFound(notFound)
-            return '-1'
+        return handle_page_not_found(url, title, artist, songDB)
     
-    #except requests.exceptions.ConnectionError as errc:
-    #    print ("Error Connecting:",errc)
-    #except requests.exceptions.Timeout as errt:
-    #    print ("Timeout Error:",errt)
-    #except requests.exceptions.RequestException as err:
-    #    print ("OOps: Something Else",err)
 
     soup = BeautifulSoup(html, features="html.parser")
 
