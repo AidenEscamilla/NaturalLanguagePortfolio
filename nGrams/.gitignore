@@ -1,0 +1,8 @@
+.DS_Store
+bigrams_Eng.pickle
+bigrams_Fren.pickle
+bigrams_Ital.pickle
+classifications.txt
+unigrams_Eng.pickle
+unigrams_Fren.pickle
+unigrams_Ital.pickle
