@@ -9,6 +9,9 @@ class MockSongs:
     def insertToNotFound(self, songNotFound):                                                    #Maybe prob here
         pass
 
+    def insert_song(self, songDict):
+        pass
+
 class Songs:
     def __init__(self):
         ssl._create_default_https_context = ssl._create_unverified_context
@@ -32,7 +35,7 @@ class Songs:
         rows = result.fetchall()
         return rows
     
-    def searchUserSong(self, title):
+    def search_user_songs(self, title):
         half_input = title[:int(len(title)/2)]
         result = self.connection.execute('SELECT * FROM Song WHERE name LIKE ?', ['%'+title+'%'])
         if result == None:
@@ -44,7 +47,7 @@ class Songs:
         else:
             return rows
     
-    def searchUserSongAndArtist(self, title, artist):
+    def search_user_song_and_artist(self, title, artist):
         half_input = title[:int(len(title)/2)]
         result = self.connection.execute('SELECT * FROM Song WHERE name LIKE ? AND artist LIKE ?', ['%'+title+'%', '%'+artist+'%'])
         if result == None:
@@ -56,12 +59,12 @@ class Songs:
         else:
             return rows
 
-    def getSpecificWithLyrics(self, title, artist):
+    def get_song_with_lyrics(self, title, artist):
         result = self.connection.execute('SELECT * FROM Song INNER JOIN Lyrics on Song.url = Lyrics.url WHERE name = ? AND artist = ? AND length(lyrics) > 0', [title, artist])
         rows = result.fetchone()
         return rows
     
-    def getCategoryRows(self, category):
+    def get_category_rows(self, category):
         result = self.connection.execute('SELECT * FROM Song WHERE Category = ?', [category])
         rows = result.fetchall()
 
@@ -70,16 +73,16 @@ class Songs:
         else:
             return rows
     
-    def getRandomRows(self):
+    def get_random_rows(self):
         result = self.connection.execute('SELECT * FROM Song ORDER BY RANDOM() LIMIT 5')
         rows = result.fetchall()
         return rows
     
-    def insertSong(self, songDict):
+    def insert_song(self, songDict):
         result = self.connection.execute('INSERT OR REPLACE INTO Song(url, name, artist) VALUES(:url, :name, :artist)', songDict)
         self.connection.commit()
 
-    def getAllSongs(self):
+    def get_all_songs(self):
         result = self.connection.execute('SELECT * FROM Song')
         rows = result.fetchall()
         return rows
@@ -93,6 +96,6 @@ class Songs:
         result = self.connection.execute('INSERT OR REPLACE INTO Song_Not_Found VALUES( :name, :artist, :error, :url)', songNotFound)
         self.connection.commit()
 
-    def insertToLyrics(self, lyricsHolder):                                                     #Maybe prob here
+    def insert_to_lyrics(self, lyricsHolder):                                                     #Maybe prob here
         result = self.connection.execute('INSERT OR REPLACE INTO Lyrics VALUES(:lyrics, :url)', lyricsHolder)
         self.connection.commit()
