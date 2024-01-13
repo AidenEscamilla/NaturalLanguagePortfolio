@@ -27,11 +27,10 @@ import pickle
 import sqlite3
 from statistics import mode, median, mean
 
-def processSongs(songList, SongDb):
+def process_songs(song_list, song_db):
     url = "https://genius.com/"
-    db = SongDb
-
-    for song in songList:
+    db = song_db
+    for song in song_list:
         #print(song)
         artist = song.get('artist')
         title = song.get('name')
@@ -58,20 +57,20 @@ def processSongs(songList, SongDb):
 
         tokens = (artist + ' ' + title).split()
         if len(tokens) != 0:
-            urlString = url + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
-            urlString = re.sub('-[*-]', '', urlString)      #Fixes specific formatting for many spaces and a dash included in title 
+            url_string = url + tokens[0] +'-' + '-'.join(tokens[1:]).lower() + '-lyrics'
+            url_string = re.sub('-[*-]', '', url_string)      #Fixes specific formatting for many spaces and a dash included in title 
             
-            song['url'] = urlString
-            db.insertSong(song)
+            song['url'] = url_string
+            db.insert_song(song)
 
 
-def getSpotifyArtists(trackLimit):
+def get_spotify_artists(track_limit):
     artist = []
     scope = "user-library-read"
     
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    results = sp.current_user_saved_tracks(limit=trackLimit)
+    results = sp.current_user_saved_tracks(limit=track_limit)
     for item in results['items']:
         track = item['track']
         #print(track['artists'][0]['name'], " – ", track['name'], ' - ', track['album']['name'])
@@ -83,48 +82,33 @@ def getSpotifyArtists(trackLimit):
     return [*set(artist)]
 
 
-def getSpotifyAlbums():
-    albumIds = []
-    AlbumOffset = 0
-    moreAlbums = True
+def get_spotify_albums():
+    album_ids = []
+    album_offset = 0
+    more_albums = True
     counter = 0
     scope = "user-library-read"
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    while moreAlbums:
-        results = sp.current_user_saved_albums(limit=10, offset=AlbumOffset)
-        #print(results)
+    while more_albums:
+        results = sp.current_user_saved_albums(limit=10, offset=album_offset)
         if len(results['items']) < 10:
-            moreAlbums = False
+            more_albums = False
 
         for i, album in enumerate(results['items']):
-            #print(i, ': ', album['album']['name'], '\n', album['album']['tracks']['href'], '\n') 
-            albumIds.append(album['album']['id'])          
-        #print('LINE: ', AlbumOffset/10)
-        AlbumOffset += 10
+            album_ids.append(album['album']['id'])          
+        album_offset += 10
         
+    return album_ids
 
-    #print("ALBUM_IDS = ", albumIds)
-    return albumIds
+def get_album_songs(sp, album, songs):
+    more_songs = True
+    offset = 0
 
-
-def getAlbumSongs(AlbumIDList, songDB):
-    MyOffset = 0
-    songs = []
-    urlList = []
-    songDict = {}
-    temp = {}
-    moreSongs = True
-    scope = "user-library-read"
-
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
-    for album in AlbumIDList:
-        #print('PLAYLIST: ', playlist)
-        
-        while moreSongs:
+    while more_songs:
             #print("ALBUM ID = ", album)
-            results = sp.album_tracks(album_id=album, limit=10, offset=MyOffset)
+            results = sp.album_tracks(album_id=album, limit=10, offset=offset)
             
             for item in results['items']:
                 if item['is_local']:    #Skip local files
@@ -134,69 +118,70 @@ def getAlbumSongs(AlbumIDList, songDB):
                 songs.append(temp)
 
             if len(results['items']) < 10:
-                MyOffset = 0
-                moreSongs = False
+                offset = 0
+                more_songs = False
             else:
-                MyOffset += 10
+                offset += 10
 
-        moreSongs = True
+        
+def get_all_album_songs(album_ids, song_db):
+    songs = []
+    scope = "user-library-read"
 
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+    for album in album_ids:
+        get_album_songs(sp, album, songs)
 
     #make a set of songs before processing
-    setMaker = []
+    songs_set = []
     for song in songs:
-        if not song in setMaker:
-            setMaker.append(song)
+        if not song in songs_set:
+            songs_set.append(song)
 
-    songs = setMaker   #tested, it works
-    #print("\nSONGS = \n", songs)
-    processSongs(songs, songDB)
-   
-    #result = songDB.getAllSongs()
-   
+    process_songs(songs_set, song_db) #next to unit test   
     return songs
 
 
-def getSpotifyPlaylists():
-    morePlaylists = True
-    MyOffset = 0
-    playlistsTracksUrls = []
+def get_spotify_playlists():
+    more_playlists = True
+    my_offset = 0
+    playlists_tracks_urls = []
     scope = "playlist-read-private"
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    while morePlaylists:
-        results = sp.current_user_playlists(limit=10, offset=MyOffset)
+    while more_playlists:
+        results = sp.current_user_playlists(limit=10, offset=my_offset)
         
         if len(results['items']) < 10:
-            morePlaylists = False
+            more_playlists = False
 
         for i, playlist in enumerate(results['items']):
                 #print(i, ': ', playlist['name'], '\n', playlist['tracks']['href'], '\n') 
-            playlistsTracksUrls.append(playlist['id'])          
-        #print('LINE: ', MyOffset/10)
-        MyOffset += 10
+            playlists_tracks_urls.append(playlist['id'])          
+        #print('LINE: ', my_offset/10)
+        my_offset += 10
 
         
-    #print("PLAYLISTS = ", playlistsTracksUrls)
-    return playlistsTracksUrls
+    #print("PLAYLISTS = ", playlists_tracks_urls)
+    return playlists_tracks_urls
 
 
 
-def getPlaylistSongs(trackUrlList, songDB):
-    MyOffset = 0
+def get_playlist_songs(track_url_list, song_db):
+    my_offset = 0
     songs = []
     urlList = []
     songDict = {}
     temp = {}
-    moreSongs = True
+    more_songs = True
 
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth())
-    for playlist in trackUrlList:
+    for playlist in track_url_list:
         #print('PLAYLIST: ', playlist)
         
-        while moreSongs:
-            results = sp.playlist_tracks(playlist_id=playlist, fields='items(track(name,artists(name)))', limit=10, offset=MyOffset)
+        while more_songs:
+            results = sp.playlist_tracks(playlist_id=playlist, fields='items(track(name,artists(name)))', limit=10, offset=my_offset)
             
             for item in results['items']:
                 # if not item:
@@ -210,22 +195,22 @@ def getPlaylistSongs(trackUrlList, songDB):
                 songs.append(temp)
         
             if len(results['items']) < 10:
-                moreSongs = False
+                more_songs = False
             else:
-                MyOffset += 10
+                my_offset += 10
 
-        moreSongs = True
+        more_songs = True
 
 
     #make a set of songs before processing
-    setMaker = []
+    set_maker = []
     for song in songs:
-        if not song in setMaker:
-            setMaker.append(song)
+        if not song in set_maker:
+            set_maker.append(song)
 
-    songs = setMaker   #tested, it works
+    songs = set_maker   #tested, it works
 
-    processSongs(songs, songDB)
+    process_songs(songs, song_db)
    
     #result = connection.execute('SELECT * FROM Song')
     #for row in result.fetchall():
@@ -234,12 +219,12 @@ def getPlaylistSongs(trackUrlList, songDB):
     return songs
 
 
-def getSpotifySongs(SongDb):
+def get_spotify_songs(song_db):
     songs = []
     urlList = []
     songDict = {}
-    moreSongs = True
-    songOffset = 0
+    more_songs = True
+    song_offset = 0
     scope = "user-library-read"
     counter = 0
     #CHANGE COUNTER FOR MORE SONGS IN LIBRARY
@@ -247,37 +232,37 @@ def getSpotifySongs(SongDb):
     
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    while moreSongs:
+    while more_songs:
         #print('IN SONG LIBRARY')
-        results = sp.current_user_saved_tracks(limit=25, offset=songOffset)
+        results = sp.current_user_saved_tracks(limit=25, offset=song_offset)
         for item in results['items']:
             track = item['track']
             temp = {'name': track['name'], 'artist': track['artists'][0]['name']}
             songs.append(temp)
             counter += 1
         if len(results['items']) < 10:# or counter >= 25:
-            moreSongs = False
+            more_songs = False
         else:
             #print(counter)
-            #print('OffSet = ', songOffset, 'len(items): ', len(results['items']))
-            #print(songs[9 + songOffset])
-            songOffset += 25
+            #print('OffSet = ', song_offset, 'len(items): ', len(results['items']))
+            #print(songs[9 + song_offset])
+            song_offset += 25
         
 
     
-    processSongs(songs, SongDb)    
+    process_songs(songs, song_db)    
     
     return songs
 
 
 
-def filterPage(soup, outputFileName, filterArtist, filterSong):
-    with open(outputFileName, 'w') as f:
+def filter_page(soup, output_file_name, filter_artist, filter_song):
+    with open(output_file_name, 'w') as f:
         for link in soup.find_all('a'):
             link_str = str(link.get('href')).lower()
-            tokens = filterSong.split('-')
+            tokens = filter_song.split('-')
             for token in tokens:
-                if filterArtist in link_str and token in link_str and 'lyric' in link_str: 
+                if filter_artist in link_str and token in link_str and 'lyric' in link_str: 
                     #print('FOUND: ' , link_str, '\n')
                     if link_str.startswith('/url?q='):
                         link_str = link_str[7:]
@@ -289,12 +274,12 @@ def filterPage(soup, outputFileName, filterArtist, filterSong):
                         f.write(link_str + '\n')
                         continue
 
-def filterPageAppend(soup, outputFileName, filterString, moreFilterString):
-    with open(outputFileName, 'a') as f:
+def filter_page_append(soup, output_file_name, filter_string, more_filter_string):
+    with open(output_file_name, 'a') as f:
         for link in soup.find_all('a'):
             link_str = str(link.get('href'))
             print(link_str)
-            if filterString in link_str and moreFilterString in link_str: #ex. and 'Boywithuke' in link_str:
+            if filter_string in link_str and more_filter_string in link_str: #ex. and 'Boywithuke' in link_str:
                 if link_str.startswith('/url?q='):
                     link_str = link_str[7:]
                     print('MOD:', link_str)
@@ -325,7 +310,7 @@ def handle_page_not_found(url, title, artist, songDB):
         for script in soup(["script", "style", "html.parser"]):
             script.extract()    # rip it out
         
-        filterPage(soup, 'tryingArtist.txt', artist, title)
+        filter_page(soup, 'tryingArtist.txt', artist, title)
         
         trying = linecache.getline('tryingArtist.txt', 1)
         finding_lyrics_url = trying# + '-lyrics'
@@ -351,7 +336,7 @@ def handle_page_not_found(url, title, artist, songDB):
         return '-1'
 
 
-def getSoupFromWebsite(url, title, artist, songDB):
+def get_soup_from_website(url, title, artist, songDB):
 
     headers = {'User-Agent': 'AppleWebKit/537.36'}
 
@@ -380,19 +365,19 @@ def getSoupFromWebsite(url, title, artist, songDB):
     return soup
 
 
-def generateLyricFiles(songDataBase, newSongsList):
+def generate_lyric_files(song_data_base, new_songs_list):
 
-    for song in newSongsList:
+    for song in new_songs_list:
         #print('DictGet: ', songNotWorking.get(url))
-        lyricSoup = getSoupFromWebsite(song.get('url'), song.get('name'), song.get('artist'), songDataBase)
+        lyric_soup = get_soup_from_website(song.get('url'), song.get('name'), song.get('artist'), song_data_base)
         
-        if lyricSoup == '-1':       #Skip 404's
+        if lyric_soup == '-1':       #Skip 404's
             #print('skipped: ', url)
             continue
         
-        if isinstance(lyricSoup, int):
-            print(lyricSoup)
-        containers = lyricSoup.findAll('div', {"data-lyrics-container": True})
+        if isinstance(lyric_soup, int):
+            print(lyric_soup)
+        containers = lyric_soup.findAll('div', {"data-lyrics-container": True})
 
         text = ''
 
@@ -402,12 +387,15 @@ def generateLyricFiles(songDataBase, newSongsList):
         #txt clean up
         text = re.sub('\[[^\]]*\]', '', text)               #Delete everything between [] including brackets like '[Verse 1]', '[Chrous]', ect.
         text = re.sub('(?<=[?!])(?=[A-Z])', '. ', text)      #fixes lines that end in ?
-        text = re.sub('\'(?=[A-Z])', '. ', text)         #Fixes country ' thats used to start a word e.x: 'Cause
-        text = re.sub('(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z])', '. ', text)         #space out text because the <br /> is thrown away leaving words touching and hard to tokenize. Buuut you can seperate by capital letters because every new line they capitalize
+        text = re.sub('\'(?=[A-Z])', '. ', text)         #Fixes "country" ' thats used to start a word e.x: 'Cause
+        text = re.sub('(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z])', '. \n', text)          #space out text because the <br /> is thrown away leaving words touching and hard to tokenize. 
+                                                                                        #Buuut you can seperate by capital letters because every new line they capitalize
+                                                                                        #Added \n to introduce the new line in order to give chatgpt the formatted version of the lyrics
+                                                                                        #Stanzas and new lines helps it recognize patterns, sections of ideas, and sentiment (mood and themes are the same without stanzas)
         text = text.replace('wanna', 'want to')         #Fix wanna to want to
         text = re.sub('[Cc]an\'t', 'can not', text)     #replace can't or Can't with can not because word tokenize stops reading past ' because it's not alpha
         text = text.replace('...', '. ')               #This line and the one below fix specific formatting found on the website. This fixes ellipses
-        text = text.replace('Cause', 'Because')         #This fixes country grammar
+        text = text.replace('Cause', 'Because')         #This fixes "country" grammar
         text = re.sub(' \(*x[0-9]\)*', '. ', text) #This fixes the '(x2)' text
         text = re.sub('x[0-9]', '. ', text)            #This fixes x2, x3, x4... ect when not in parenthesis
         #print(text)
@@ -415,30 +403,30 @@ def generateLyricFiles(songDataBase, newSongsList):
         
         
         
-        lyricsOutput = ''
+        lyrics_output = ''
         for sentence in text:
-            lyricsOutput += sentence + " "
+            lyrics_output += sentence + " "
 
-        temp = {'url': song.get('url'), 'lyrics': lyricsOutput}
-        songDataBase.insertToLyrics(temp)
+        temp = {'url': song.get('url'), 'lyrics': lyrics_output}
+        song_data_base.insert_to_lyrics(temp)
     
 
 
 #Term frequency (TF) is how often a token appears in a document 
-def createTF(songGiven, songDB):
+def create_term_frequency(song_given, song_db):
     tokens = []
     stop_words = set(stopwords.words('english'))
     tf_dict = {}
     
 
-    #cleanedLyrics = re.sub('!', '. ', songGiven['lyrics'])
-    #cleanedLyrics = re.sub('?', '. ', cleanedLyrics)
-    songGiven = songDB.getSpecificWithLyrics(songGiven['name'], songGiven['artist'])
-    if songGiven == None:
+    #cleaned_lyrics = re.sub('!', '. ', song_given['lyrics'])
+    #cleaned_lyrics = re.sub('?', '. ', cleaned_lyrics)
+    song_given = song_db.get_song_with_lyrics(song_given['name'], song_given['artist'])
+    if song_given == None:
         return '-1'
-    cleanedLyrics = songGiven['lyrics'].split('.')
+    cleaned_lyrics = song_given['lyrics'].split('.')
 
-    for line in cleanedLyrics:      #for eevry line tokenize 
+    for line in cleaned_lyrics:      #for eevry line tokenize 
         tokens += word_tokenize(line.lower())
     
     tokens = [w for w in tokens if w.isalpha() and w not in stop_words] #get clean tokens #This w.isalpha() messes up apostrophies need to fix that
@@ -481,7 +469,7 @@ def createTF_IDF_TfxIdf(songDB, userSongList):
         if songRow == None:
             continue
         #print(i, 'SONG: ', songRow['name'], " - ", songRow['artist'])
-        temp = createTF(songRow, songDB)
+        temp = create_term_frequency(songRow, songDB)
         if temp == '-1':
             continue
         temp['Document'] = songRow['url']
@@ -519,12 +507,12 @@ def createTF_IDF_TfxIdf(songDB, userSongList):
 
 
 #I just keep adding peoples spotify songs into this dictionary full of songs and the related score
-def buildKnowledgeBase(connection, term_Importance_list):
+def build_knowledge_base(connection, term_importance_list):
     sia = SentimentIntensityAnalyzer()
 
     sentences = []
     #scores = []
-    weightedScores = []
+    weighted_scores = []
 
     #res = connection.execute('SELECT Count(*) FROM Song')
     #num_rows = int(res.fetchone()[0])
@@ -545,23 +533,23 @@ def buildKnowledgeBase(connection, term_Importance_list):
 
             tf_idf_weight_multiplyer = 1
             for token in tokens:        #(taken the same way as the function), multiply together term weights to get total sentence importance. Multiply sentence sentiment score by importance per sentence to get more accurate scores
-                if token in term_Importance_list[i]:
-                    tf_idf_weight_multiplyer *= term_Importance_list[i].get(token)       #Double check if this is getting the right token
+                if token in term_importance_list[i]:
+                    tf_idf_weight_multiplyer *= term_importance_list[i].get(token)       #Double check if this is getting the right token
                 else:
-                    tf_idf_weight_multiplyer *= 1/len(term_Importance_list[i])       #Add smoothing here and an if statment for tokens not found #this is bad smooothing
+                    tf_idf_weight_multiplyer *= 1/len(term_importance_list[i])       #Add smoothing here and an if statment for tokens not found #this is bad smooothing
 
-            weightedScores.append(sia.polarity_scores(sentence)["compound"] * tf_idf_weight_multiplyer)
+            weighted_scores.append(sia.polarity_scores(sentence)["compound"] * tf_idf_weight_multiplyer)
             #scores.append(sia.polarity_scores(sentence)["compound"])
         
         #total = 0
-        weightedTotal = 0
+        weighted_total = 0
         #for score in scores:
             #total += score
-        for Wscore in weightedScores:
-            weightedTotal += Wscore
+        for score in weighted_scores:
+            weighted_total += score
 
         if len(sentences) != 0:     #need this iff statment because some songs are found and files are made but they are instrumentals with no lyrics
-            connection.execute('UPDATE Song SET sentiment_Score = ? WHERE url = ?', (weightedTotal/len(weightedScores), song['url']))
+            connection.execute('UPDATE Song SET sentiment_Score = ? WHERE url = ?', (weighted_total/len(weighted_scores), song['url']))
             connection.commit()
     #counter = 0
     #for pair in knowledge:
@@ -574,57 +562,57 @@ def buildKnowledgeBase(connection, term_Importance_list):
     #    print(pair, ' SCORE: ', knowledge.get(pair))
 
 
-def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFlag):
+def lyric_recommendation(song_database, song_wanting_recommendation_for, first_time_flag):
     
-    dfRecSong = {}
-    errMessage = 'Sorry, I could not find that song from your library'
-    errMessage2 = 'Sorry, the song wasn\'t found in the vectorized database'
-    lyricsRow = []
+    dataframe_recommended_song = {}
+    error_message = 'Sorry, I could not find that song from your library'
+    error_message2 = 'Sorry, the song wasn\'t found in the vectorized database'
+    lyrics_row = []
 
 
-    if len(SongWantingRecommendationFor) == 1:
-        answer = SongDatabase.searchUserSong(SongWantingRecommendationFor[0])
+    if len(song_wanting_recommendation_for) == 1:
+        answer = song_database.search_user_songs(song_wanting_recommendation_for[0])
         if answer == -1:
-            return errMessage
+            return error_message
         print(answer['name'], ': ', answer['artist'])
-        lyricsRow = SongDatabase.getSpecificWithLyrics(answer['name'], answer['artist'])
-        if lyricsRow == None: #maybe bug found HERE. none lyrics slipping through sql call
-            return errMessage2
+        lyrics_row = song_database.get_song_with_lyrics(answer['name'], answer['artist'])
+        if lyrics_row == None: #maybe bug found HERE. none lyrics slipping through sql call
+            return error_message2
 
-        dfRecSong['text'] = lyricsRow['lyrics']
-        dfRecSong['artist'] = lyricsRow['artist']
-        dfRecSong['song'] = lyricsRow['name']
-        dfRecSong['link'] = lyricsRow['url']
-    elif len(SongWantingRecommendationFor) == 2:
-        recommendationArtist = SongWantingRecommendationFor[1]
-        answer = SongDatabase.searchUserSongAndArtist(SongWantingRecommendationFor[0], recommendationArtist)
+        dataframe_recommended_song['text'] = lyrics_row['lyrics']
+        dataframe_recommended_song['artist'] = lyrics_row['artist']
+        dataframe_recommended_song['song'] = lyrics_row['name']
+        dataframe_recommended_song['link'] = lyrics_row['url']
+    elif len(song_wanting_recommendation_for) == 2:
+        recommendation_artist = song_wanting_recommendation_for[1]
+        answer = song_database.search_user_song_and_artist(song_wanting_recommendation_for[0], recommendation_artist)
         if answer == -1:
-            return errMessage
+            return error_message
         print(answer['name'], ': ', answer['artist'])
-        lyricsRow = SongDatabase.getSpecificWithLyrics(answer['name'], answer['artist'])
-        if lyricsRow == None:
-            return errMessage2
-        dfRecSong['text'] = lyricsRow['lyrics']
-        dfRecSong['artist'] = lyricsRow['artist']
-        dfRecSong['song'] = lyricsRow['name']
-        dfRecSong['link'] = lyricsRow['url']
+        lyrics_row = song_database.get_song_with_lyrics(answer['name'], answer['artist'])
+        if lyrics_row == None:
+            return error_message2
+        dataframe_recommended_song['text'] = lyrics_row['lyrics']
+        dataframe_recommended_song['artist'] = lyrics_row['artist']
+        dataframe_recommended_song['song'] = lyrics_row['name']
+        dataframe_recommended_song['link'] = lyrics_row['url']
 
 
-    if firstTimeFlag:
+    if first_time_flag:
 
-        conn = sqlite3.connect('Songs.db') 
+        connection = sqlite3.connect('Songs.db') 
             
         sql_query = pd.read_sql_query ('''
                                 SELECT DISTINCT s.url AS link, name AS song, artist, lyrics AS text  FROM Song AS s INNER JOIN Lyrics AS l on s.url = l.url WHERE length(lyrics) > 0
-                                ''', conn)
+                                ''', connection)
 
         dfUser = pd.DataFrame(sql_query, columns = ['artist', 'song', 'link', 'text',])
         print ('Your songs as a Panda df!:\n', dfUser)
 
-        dfRecSong = pd.DataFrame(dfRecSong, columns = ['artist', 'song', 'link', 'text',], index=[0])
+        dataframe_recommended_song = pd.DataFrame(dataframe_recommended_song, columns = ['artist', 'song', 'link', 'text',], index=[0])
         df = pd.read_csv('spotify_millsongdata.csv')
         df = pd.concat([df, dfUser], ignore_index=True)
-        df = pd.concat([dfRecSong, df], ignore_index=True)
+        df = pd.concat([dataframe_recommended_song, df], ignore_index=True)
         df.reset_index()
         #print(df.head)
         #maybe don't need this variable
@@ -647,75 +635,75 @@ def lyricRecommendation(SongDatabase, SongWantingRecommendationFor, firstTimeFla
     with open('pdDataFrame.pickle', 'rb') as handle:
         df = pickle.load(handle)
 
-    #print('#####: ', df.loc[df['link'] == lyricsRow['url']])
-    foundIndex = df.loc[df['link'] == lyricsRow['url']].index.values[0]
-    recommendationsFound = cosine_similarity(Xtfid[foundIndex], Xtfid)
-    #print(recommendationsFound)
+    #print('#####: ', df.loc[df['link'] == lyrics_row['url']])
+    found_index = df.loc[df['link'] == lyrics_row['url']].index.values[0]
+    recommendations_found = cosine_similarity(Xtfid[found_index], Xtfid)
+    #print(recommendations_found)
 
-    print('\nStdev: ', np.std(recommendationsFound))
-    stdev = np.std(recommendationsFound)
-    meanVar = mean(recommendationsFound.tolist()[0])
+    print('\nStdev: ', np.std(recommendations_found))
+    stdev = np.std(recommendations_found)
+    meanVar = mean(recommendations_found.tolist()[0])
     print('mean: ', meanVar)
-    medianVar = median(recommendationsFound.tolist()[0])
-    print('Median: ', medianVar, '\n')
+    median_value = median(recommendations_found.tolist()[0])
+    print('Median: ', median_value, '\n')
     #Uncomment below to see the cosine vector score if you're curious
-    topTen = sorted(recommendationsFound[0], reverse=True)[2:12]
+    topTen = sorted(recommendations_found[0], reverse=True)[2:12]
     #print(topTen)
     recommendations = []
-    for i, vector in enumerate(recommendationsFound.tolist()[0]):
+    for i, vector in enumerate(recommendations_found.tolist()[0]):
         if(vector in topTen):
             #print('vec: ', vector)
             recommendations.append([i, vector])
     #print(recommendations)
 
-    indexList = []
+    index_list = []
     for pair in recommendations:
-        indexList.append(pair[0])
+        index_list.append(pair[0])
 
-    dataRec = []
-    for indexRec in indexList[0:11]:
+    data_recommendations = []
+    for rec_index in index_list[0:11]:
         #print(indexRec)
-        dataRec.append(str(df.iloc[[indexRec]]['song'].values[0] + ': by ' + df.iloc[[indexRec]]['artist'].values[0]))
+        data_recommendations.append(str(df.iloc[[rec_index]]['song'].values[0] + ': by ' + df.iloc[[rec_index]]['artist'].values[0]))
     
     print('\nTop ten songs based on lyrics:\n')
-    for songRec in dataRec:
-        print(songRec, '\n')
+    for song_rec in data_recommendations:
+        print(song_rec, '\n')
 
     return 'Finished lyric execution Properly'
 
-def setup(databseSongs):
-    AlbumIDList = getSpotifyAlbums()
-    albumSongsList = getAlbumSongs(AlbumIDList, databseSongs)
+def setup(databse_songs):
+    album_ids = get_spotify_albums()
+    album_songs_list = get_all_album_songs(album_ids, databse_songs)
     
-    playlistIDList = getSpotifyPlaylists()
-    playlistSongsList = getPlaylistSongs(playlistIDList, databseSongs)
+    playlist_id_list = get_spotify_playlists()
+    playlist_songs_list = get_playlist_songs(playlist_id_list, databse_songs)
     
-    savedSongsList = getSpotifySongs(databseSongs)
+    saved_songs_list = get_spotify_songs(databse_songs)
 
 
     
-    newUserSongs = albumSongsList + playlistSongsList + savedSongsList
-    #generateLyricFiles(databseSongs, newUserSongs)
+    new_user_songs = album_songs_list + playlist_songs_list + saved_songs_list
+    #generate_lyric_files(databse_songs, new_user_songs)
 
 def main():
-    SongDb = Songs()
-    #setup(SongDb)
+    song_db = Songs()
+    #setup(song_db)
     
     #SongWantingRecommendationFor = sys.argv[1]  
-    #lyricRecommendation(SongDb, SongWantingRecommendationFor)
-        #artistList = getSpotifyArtists(50)
+    #lyric_recommendation(song_db, SongWantingRecommendationFor)
+        #artistList = get_spotify_artists(50)
         #print(artistList, '\n', len(artistList))
     
         #albumList = getSpotifyAlbums(50)
         #print(albumList, '\n', len(albumList))
     '''
     AlbumIDList = getSpotifyAlbums()
-    albumSongsList = getAlbumSongs(AlbumIDList, SongDb)
+    albumSongsList = getAlbumSongs(AlbumIDList, song_db)
     
-    playlistIDList = getSpotifyPlaylists()
-    playlistSongsList = getPlaylistSongs(playlistIDList, SongDb)
+    playlistIDList = get_spotify_playlists()
+    playlistSongsList = get_playlist_songs(playlistIDList, song_db)
     
-    savedSongsList = getSpotifySongs(SongDb)
+    savedSongsList = get_spotify_songs(song_db)
 
 
     
@@ -731,7 +719,7 @@ def main():
     #-Without webcrawling and geneerating every run
     #CHECKPOINT
 
-    #generateLyricFiles(SongDb, newUserSongs)
+    #generate_lyric_files(song_db, newUserSongs)
     
     #res = con.execute("SELECT * FROM Lyrics")
     #res = con.execute('SELECT COUNT(*) FROM Song')
@@ -739,7 +727,7 @@ def main():
     #    print(row['url'], ': ', row['lyrics'], '\n\n')
 
     
-    holdResults = createTF_IDF_TfxIdf(SongDb, newUserSongs)
+    holdResults = createTF_IDF_TfxIdf(song_db, newUserSongs)
     list_of_tfs = holdResults[0]
     idf_dictionary = holdResults[1]
     tf_idf_list = holdResults[-1]
@@ -767,7 +755,7 @@ def main():
     quit()
     '''
     #build knowledge base
-    buildKnowledgeBase(con, tf_idf_list)
+    build_knowledge_base(con, tf_idf_list)
     
     result = con.execute('SELECT * FROM Song')
     for row in result.fetchall():
@@ -800,8 +788,8 @@ if __name__ == '__main__':
     Myurl = "https://genius.com/artists/" + artistNameFromInput
     print('\n', Myurl)
     
-    soup = getSoupFromWebsite(Myurl)
-    filterPage(soup, 'urls.txt', 'album')
+    soup = get_soup_from_website(Myurl)
+    filter_page(soup, 'urls.txt', 'album')
 
     
     with open('urls.txt', 'r') as f:
@@ -810,7 +798,7 @@ if __name__ == '__main__':
     #Edit: nvm no need to be careful. this code clears the file before a new artist
     open('lyricPages.txt', "w").close()
     for album in AlbumUrls:
-        albumSoup = getSoupFromWebsite(album)
+        albumSoup = get_soup_from_website(album)
         #print('\nNEW LINE\n')                         #CHANGE ARTIST NAME BELOW THE HASHTAG Edit: changed to sys arg input variable
-        filterPageAppend(albumSoup, 'lyricPages.txt', artistNameFromInput, 'lyrics')
+        filter_page_append(albumSoup, 'lyricPages.txt', artistNameFromInput, 'lyrics')
 #'''

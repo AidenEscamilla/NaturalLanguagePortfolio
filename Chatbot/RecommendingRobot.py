@@ -4,8 +4,9 @@ import re
 import sqlite3
 import ssl
 import random
+
 from songs import Songs
-from WebCrawlSpotify import lyricRecommendation
+from WebCrawlSpotify import lyric_recommendation
 from WebCrawlSpotify import setup
 
 
@@ -16,94 +17,94 @@ from WebCrawlSpotify import setup
     #def getCategory(category):
 
 
-def randomClassifier(SongDatabase):
+def random_classifier(song_database):
     song = input('Enter a song (e.x Radioactive by Imagine Dragons): ')
     while len(song) <= 1:
         song = input('Please enter a valid song: ')
 
-    songData = song.split(" by ")
+    song_data = song.split(" by ")
     #store it
     #print(songData)
-    songArtist = songData[0]
-    songTitle = songData[1]
+    song_artist = song_data[0]
+    song_title = song_data[1]
     #print it / testing
-    print('you entered: ', songTitle, ':', songArtist)
+    print('you entered: ', song_title, ':', song_artist)
 
 
-    result = SongDatabase.getRandomRows()
+    result = song_database.get_random_rows()
     #result = connection.execute('SELECT * FROM Song ORDER BY RANDOM() LIMIT 5')
     print('\nHere are some random songs you might like!\n')
     for row in result:
         print(row['name'], ': ', row['artist'])
 
-def categoryClassifier(SongDatabase):
+def category_classifier(song_database):
 
     categories = ['rock', 'pop', 'disco', 'piano', 'scremo', 'ska', 'jazz']
     #uncomment this block if you're starting the data base from scratch!
     
     #Add arbitraty categories
-    SongDatabase.connection.execute('Update Song SET Category = NULL')
-    all = SongDatabase.getAllSongs()
+    song_database.connection.execute('Update Song SET Category = NULL')
+    all = song_database.get_all_songs()
     for row in all:
-        SongDatabase.connection.execute('UPDATE Song SET Category = ? WHERE url = ?', [random.choice(categories), row['url']])
-    SongDatabase.connection.commit()
+        song_database.connection.execute('UPDATE Song SET Category = ? WHERE url = ?', [random.choice(categories), row['url']])
+    song_database.connection.commit()
     
     #Re comment above here
     print('Enter a category for song recommendations:\n\n')
     for cat in categories:
         print(cat)
     
-    Category = input("Type Category: ").lower()
-    result = SongDatabase.getCategoryRows(Category)
+    category = input("Type Category: ").lower()
+    result = song_database.get_category_rows(category)
     if result == -1:
         return '\nI couldn\'t find that category\n'
 
 
 
-    print('\nHere are some',Category, 'songs you might like!\n')
-    numOutput = 10
+    print('\nHere are some',category, 'songs you might like!\n')
+    numOutput = 10 #todo delete later, seems unneeded
     for row in random.choices(result, k=10):
         print(row['name'], ': ', row['artist'])
     
     return 'Finished category execution Properly'
 
 
-def lyricClassifier(SongDatabase, firstTimeFlag):
-    Song_wanting = input('Please enter a song you want recommendations for: ')
-    Song_Artist_Wanting = input('Please enter the artist (type N/A for unknown or unwanted): ')
-    lyricArgs = []
+def lyric_classifier(song_database, first_time_flag):
+    song_wanting = input('Please enter a song you want recommendations for: ')
+    song_artist_wanting = input('Please enter the artist (type N/A for unknown or unwanted): ')
+    lyric_args = []
     
-    if Song_Artist_Wanting.lower() == 'n/a':
-        lyricArgs.append(Song_wanting)
+    if song_artist_wanting.lower() == 'n/a':
+        lyric_args.append(song_wanting)
     else:
-        lyricArgs.append(Song_wanting)
-        lyricArgs.append(Song_Artist_Wanting)
+        lyric_args.append(song_wanting)
+        lyric_args.append(song_artist_wanting)
 
-    returnMessage = lyricRecommendation(SongDatabase, lyricArgs, firstTimeFlag)
-    print(returnMessage)
+    return_message = lyric_recommendation(song_database, lyric_args, first_time_flag)
+    print(return_message)
 
 
 
 
 def main():
-    SongDb = Songs()
-    setup(SongDb)
-    firstTime = True
+    song_db = Songs()
+    setup(song_db)
+    first_time = False
 
     while True:
         print('Choose how you\'d like your recommendations!\n')
-        classifierChoice = input('1. random\n2. by category\n3. by lyrics\n(type 1, 2, or 3): ')
-        if classifierChoice == '1':
-            randomClassifier(SongDb)
-        elif classifierChoice == '2':
-            print(categoryClassifier(SongDb))
-        elif classifierChoice == '3':
-            lyricClassifier(SongDb, firstTime)
-            firstTime = False
+        classifier_choice = input('1. random\n2. by category\n3. by lyrics\n(type 1, 2, or 3): ')
+        if classifier_choice == '1':
+            random_classifier(song_db)
+        elif classifier_choice == '2':
+            print(category_classifier(song_db))
+        elif classifier_choice == '3':
+            lyric_classifier(song_db, first_time)
+            first_time = False
 
         print('\nDo you want another recommendation?')
-        keepPlaying = input('y/n: ').lower()
-        if keepPlaying == 'n':
+        keep_playing = input('y/n: ').lower()
+        if keep_playing == 'n':
             print('Okay have a good day!')
             break
     quit()
